@@ -12,8 +12,9 @@ app = FastAPI()
 templates = Jinja2Templates(directory="templates")
 security = HTTPBasic()
 
-USERNAME = os.getenv("DASHBOARD_USER", "admin")
-PASSWORD = os.getenv("DASHBOARD_PASS", "itv123")
+# Load credentials from environment variables
+USERNAME = os.environ["DASHBOARD_USER"]
+PASSWORD = os.environ["DASHBOARD_PASS"]
 
 def authenticate(credentials: HTTPBasicCredentials = Depends(security)):
     correct_username = secrets.compare_digest(credentials.username, USERNAME)
