@@ -11,6 +11,7 @@
     th { background-color: #eee; }
     .channel { font-weight: bold; font-size: 18px; }
     .link { font-size: 10px; font-family: monospace; word-break: break-word; }
+    .elapsed { font-weight: normal; font-size: 14px; color: #666; margin-left: 10px; }
   </style>
 </head>
 <body>
@@ -27,9 +28,10 @@
       for (const [channel, latestUrl] of Object.entries(data.latest)) {
         const history = data.history[channel] || [];
         const count = data.counts?.[channel] || history.length;
+        const elapsed = data.elapsed?.[channel] || "";
         const diffHtml = data.diffs?.[channel] || "";
 
-        html += `<h2 class="channel">${channel} (${count})</h2>`;
+        html += `<h2 class="channel">${channel} (${count}) <span class="elapsed">– updated ${elapsed}</span></h2>`;
         html += `<table><tr><th>Stream URL</th><th>Updated At</th></tr>`;
 
         // Latest link with diff
