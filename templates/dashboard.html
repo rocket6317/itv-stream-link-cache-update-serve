@@ -7,10 +7,10 @@
     h1 { color: #333; }
     h2 { margin-top: 40px; color: #444; }
     table { border-collapse: collapse; width: 100%; margin-top: 10px; margin-bottom: 30px; }
-    th, td { border: 1px solid #ccc; padding: 6px; text-align: left; }
+    th, td { border: 1px solid #ccc; padding: 6px; text-align: left; vertical-align: top; }
     th { background-color: #eee; }
     .channel { font-weight: bold; font-size: 18px; }
-    .link { font-size: 12px; font-family: monospace; word-break: break-all; }
+    .link { font-size: 12px; font-family: monospace; word-break: break-word; }
   </style>
 </head>
 <body>
@@ -24,16 +24,27 @@
       const container = document.getElementById("dashboard");
 
       let html = "";
-      for (const [channel, url] of Object.entries(data.latest)) {
+      for (const [channel, latestUrl] of Object.entries(data.latest)) {
         const history = data.history[channel] || [];
+        const diffHtml = data.diffs[channel] || "";
+
         html += `<h2 class="channel">${channel}</h2>`;
         html += `<table><tr><th>Stream URL</th><th>Updated At</th></tr>`;
-        for (const entry of history) {
+
+        // Show latest link with diff
+        html += `<tr>
+          <td class="link">${diffHtml}</td>
+          <td>${history[history.length - 1].timestamp}</td>
+        </tr>`;
+
+        // Show older links
+        for (let i = history.length - 2; i >= 0; i--) {
           html += `<tr>
-            <td class="link"><code>${entry.url}</code></td>
-            <td>${entry.timestamp}</td>
+            <td class="link"><code>${history[i].url}</code></td>
+            <td>${history[i].timestamp}</td>
           </tr>`;
         }
+
         html += `</table>`;
       }
 
