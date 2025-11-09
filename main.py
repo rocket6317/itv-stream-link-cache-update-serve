@@ -1,4 +1,4 @@
-from fastapi import FastAPI, Request
+from fastapi import FastAPI, Request, Response
 from fastapi.responses import RedirectResponse
 from cache import get_cached_url, set_cached_url
 from client import fetch_stream_url
@@ -15,3 +15,12 @@ async def redirect_itv(request: Request):
     stream_url = await fetch_stream_url(channel)
     set_cached_url(channel, stream_url)
     return RedirectResponse(stream_url)
+
+@app.get("/raw")
+async def serve_raw_manifest():
+    # Simulated DASH manifest content
+    manifest = """<?xml version="1.0" encoding="UTF-8"?>
+<MPD xmlns="urn:mpeg:dash:schema:mpd:2011" type="static">
+  <!-- DASH manifest content -->
+</MPD>"""
+    return Response(content=manifest, media_type="text/plain")
