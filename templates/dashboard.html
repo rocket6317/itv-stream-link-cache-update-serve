@@ -12,6 +12,7 @@
     .channel { font-weight: bold; font-size: 18px; }
     .link { font-size: 10px; font-family: monospace; word-break: break-word; }
     .elapsed { font-weight: normal; font-size: 14px; color: #666; margin-left: 10px; }
+    .expiry { font-size: 13px; color: #888; margin-left: 10px; }
     #status { margin-bottom: 20px; font-size: 14px; color: #555; }
   </style>
 </head>
@@ -21,13 +22,22 @@
   <div id="dashboard"></div>
 
   <script>
+    function formatCountdown(expiryTimestamp) {
+      const now = Math.floor(Date.now() / 1000);
+      const secondsLeft = expiryTimestamp - now;
+      if (secondsLeft <= 0) return "Expired";
+
+      const hours = Math.floor(secondsLeft / 3600);
+      const minutes = Math.floor((secondsLeft % 3600) / 60);
+      return `${hours}h ${minutes}m remaining`;
+    }
+
     async function loadDashboard() {
       const res = await fetch("/dashboard/json");
       const data = await res.json();
       const container = document.getElementById("dashboard");
       const status = document.getElementById("status");
 
-      // Check if any channel was updated in the last 3 hours
       let active = false;
       for (const elapsed of Object.values(data.elapsed)) {
         const hours = parseInt(elapsed.split("h")[0]);
@@ -47,29 +57,4 @@
         const count = data.counts?.[channel] || history.length;
         const elapsed = data.elapsed?.[channel] || "";
         const diffHtml = data.diffs?.[channel] || "";
-
-        html += `<h2 class="channel">${channel} (${count}) <span class="elapsed">– updated ${elapsed}</span></h2>`;
-        html += `<table><tr><th>Stream URL</th><th>Updated At</th></tr>`;
-
-        html += `<tr>
-          <td class="link">${diffHtml}</td>
-          <td>${history[history.length - 1].timestamp}</td>
-        </tr>`;
-
-        for (let i = history.length - 2; i >= 0; i--) {
-          html += `<tr>
-            <td class="link"><code>${history[i].url}</code></td>
-            <td>${history[i].timestamp}</td>
-          </tr>`;
-        }
-
-        html += `</table>`;
-      }
-
-      container.innerHTML = html;
-    }
-
-    loadDashboard();
-  </script>
-</body>
-</html>
+        const expiry = data.expiry?.[channel] ||
