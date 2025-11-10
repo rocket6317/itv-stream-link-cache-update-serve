@@ -20,8 +20,6 @@ load_dotenv("stack.env")
 USERNAME = os.getenv("DASHBOARD_USER")
 PASSWORD = os.getenv("DASHBOARD_PASS")
 REFRESH_INTERVAL = int(os.getenv("REFRESH_INTERVAL", "21300"))
-BASE_URL = os.getenv("BASE_URL", "https://example.com")
-
 CHANNELS = ["ITV", "ITV2", "ITV3", "ITV4", "ITVBe"]
 
 def check_auth(credentials: HTTPBasicCredentials):
@@ -53,27 +51,6 @@ async def dashboard_json(credentials: HTTPBasicCredentials = Depends(security)):
 @app.get("/raw")
 async def raw_manifest():
     return RedirectResponse("https://example.com/static.mpd")
-
-@app.get("/playlist/{channel}.m3u8")
-async def channel_playlist(channel: str):
-    url = get_cached_url(channel)
-    if not url:
-        raise HTTPException(status_code=404, detail="Stream not available")
-    content = f"""#EXTM3U
-#EXTINF:-1 tvg-id="{channel}" tvg-name="{channel}" group-title="ITV", {channel}
-{url}
-"""
-    return PlainTextResponse(content, media_type="application/x-mpegURL")
-
-@app.get("/playlist.m3u")
-async def master_playlist():
-    lines = ["#EXTM3U"]
-    for channel in CHANNELS:
-        url = get_cached_url(channel)
-        if url:
-            lines.append(f'#EXTINF:-1 tvg-id="{channel}" tvg-name="{channel}" group-title="ITV", {channel}')
-            lines.append(url)
-    return PlainTextResponse("\n".join(lines), media_type="application/x-mpegURL")
 
 @app.on_event("startup")
 async def startup_event():
