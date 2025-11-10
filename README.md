@@ -3,6 +3,8 @@
 Stream ITV channels on IPTV players that support **clearkey**.  
 Also features a lightweight, real-time dashboard for monitoring stream URL changes across ITV channels. Built with Python, Gunicorn, and a simple HTML frontend, this app tracks updates, highlights differences, and displays historical changes with timestamps.
 
+[![ko-fi](https://ko-fi.com/img/githubbutton_sm.svg)](https://ko-fi.com/M4M31NTEGN)
+
 ---
 
 ## 🚀 Features
