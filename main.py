@@ -1,68 +1,76 @@
-import os
-import secrets
+import asyncio
 import logging
-from fastapi import FastAPI, Request, Response, Depends, HTTPException, status
-from fastapi.responses import RedirectResponse, HTMLResponse
+import os
+from fastapi import FastAPI, Request, HTTPException
+from fastapi.responses import RedirectResponse
 from fastapi.templating import Jinja2Templates
 from fastapi.security import HTTPBasic, HTTPBasicCredentials
+from starlette.status import HTTP_401_UNAUTHORIZED
+from dotenv import load_dotenv
+from dashboard import get_dashboard_data
 from cache import get_cached_url, set_cached_url
 from client import fetch_stream_url
-from dashboard import record_link, get_dashboard_data
-
-# ✅ Global logging config
-logging.basicConfig(
-    level=logging.INFO,
-    format="%(asctime)s [%(levelname)s] %(message)s"
-)
-logger = logging.getLogger(__name__)
 
 app = FastAPI()
 templates = Jinja2Templates(directory="templates")
 security = HTTPBasic()
+logger = logging.getLogger("uvicorn")
 
-USERNAME = os.environ["DASHBOARD_USER"]
-PASSWORD = os.environ["DASHBOARD_PASS"]
+load_dotenv("stack.env")
+USERNAME = os.getenv("DASHBOARD_USER")
+PASSWORD = os.getenv("DASHBOARD_PASS")
+REFRESH_INTERVAL = int(os.getenv("REFRESH_INTERVAL", "21300"))  # 5h55m default
+
 CHANNELS = ["ITV", "ITV2", "ITV3", "ITV4", "ITVBe"]
 
-def authenticate(credentials: HTTPBasicCredentials = Depends(security)):
-    if not (
-        secrets.compare_digest(credentials.username, USERNAME) and
-        secrets.compare_digest(credentials.password, PASSWORD)
-    ):
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Invalid credentials",
-            headers={"WWW-Authenticate": "Basic"},
-        )
+def check_auth(credentials: HTTPBasicCredentials):
+    if credentials.username != USERNAME or credentials.password != PASSWORD:
+        raise HTTPException(status_code=HTTP_401_UNAUTHORIZED)
 
 @app.get("/itvx")
-async def redirect_itv(request: Request):
-    channel = request.query_params.get("channel", "ITV")
-    if channel not in CHANNELS:
-        raise HTTPException(status_code=400, detail="Invalid channel")
+async def redirect_itv(channel: str):
+    url = get_cached_url(channel)
+    if not url:
+        url = await fetch_stream_url(channel)
+        set_cached_url(channel, url)
+        logger.info(f"[CACHE SET] {channel}")
+    else:
+        logger.info(f"[CACHE HIT] {channel}")
+    return RedirectResponse(url)
 
-    cached_url = get_cached_url(channel)
-    if cached_url:
-        record_link(channel, cached_url)
-        return RedirectResponse(cached_url)
-
-    stream_url = await fetch_stream_url(channel)
-    set_cached_url(channel, stream_url)
-    record_link(channel, stream_url)
-    return RedirectResponse(stream_url)
-
-@app.get("/dashboard", response_class=HTMLResponse)
-def dashboard_page(request: Request, credentials: HTTPBasicCredentials = Depends(authenticate)):
-    return templates.TemplateResponse("dashboard.html", {"request": request})
+@app.get("/dashboard")
+async def dashboard(request: Request, credentials: HTTPBasicCredentials = security):
+    check_auth(credentials)
+    data = get_dashboard_data()
+    return templates.TemplateResponse("dashboard.html", {"request": request, "data": data})
 
 @app.get("/dashboard/json")
-def dashboard_json(credentials: HTTPBasicCredentials = Depends(authenticate)):
+async def dashboard_json(credentials: HTTPBasicCredentials = security):
+    check_auth(credentials)
     return get_dashboard_data()
 
 @app.get("/raw")
-async def serve_raw_manifest():
-    manifest = """<?xml version="1.0" encoding="UTF-8"?>
-<MPD xmlns="urn:mpeg:dash:schema:mpd:2011" type="static">
-  <!-- DASH manifest content -->
-</MPD>"""
-    return Response(content=manifest, media_type="text/plain")
+async def raw_manifest():
+    return RedirectResponse("https://example.com/static.mpd")
+
+@app.on_event("startup")
+async def startup_event():
+    for channel in CHANNELS:
+        try:
+            url = await fetch_stream_url(channel)
+            set_cached_url(channel, url)
+            logger.info(f"[STARTUP] Cached {channel}")
+        except Exception as e:
+            logger.warning(f"[STARTUP ERROR] {channel}: {e}")
+    asyncio.create_task(auto_refresh_loop())
+
+async def auto_refresh_loop():
+    while True:
+        for channel in CHANNELS:
+            try:
+                url = await fetch_stream_url(channel)
+                set_cached_url(channel, url)
+                logger.info(f"[AUTO REFRESH] {channel} updated.")
+            except Exception as e:
+                logger.warning(f"[AUTO REFRESH ERROR] {channel}: {e}")
+        await asyncio.sleep(REFRESH_INTERVAL)
