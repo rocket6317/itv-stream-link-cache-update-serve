@@ -2,10 +2,10 @@ import os
 import secrets
 import asyncio
 from fastapi import FastAPI, Request, Response, Depends, HTTPException, status
-from fastapi.responses import RedirectResponse, JSONResponse, HTMLResponse
+from fastapi.responses import RedirectResponse, HTMLResponse
 from fastapi.templating import Jinja2Templates
 from fastapi.security import HTTPBasic, HTTPBasicCredentials
-from cache import get_cached_url, set_cached_url
+from cache import get_cached_url, set_cached_url, get_cached_meta
 from client import fetch_stream_url
 from dashboard import record_link, get_dashboard_data
 
@@ -13,16 +13,15 @@ app = FastAPI()
 templates = Jinja2Templates(directory="templates")
 security = HTTPBasic()
 
-# Load credentials from environment variables
 USERNAME = os.environ["DASHBOARD_USER"]
 PASSWORD = os.environ["DASHBOARD_PASS"]
-
 CHANNELS = ["ITV", "ITV2", "ITV3", "ITV4", "ITVBe"]
 
 def authenticate(credentials: HTTPBasicCredentials = Depends(security)):
-    correct_username = secrets.compare_digest(credentials.username, USERNAME)
-    correct_password = secrets.compare_digest(credentials.password, PASSWORD)
-    if not (correct_username and correct_password):
+    if not (
+        secrets.compare_digest(credentials.username, USERNAME) and
+        secrets.compare_digest(credentials.password, PASSWORD)
+    ):
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Invalid credentials",
@@ -34,13 +33,16 @@ async def start_background_tasks():
     async def auto_check_loop():
         while True:
             for channel in CHANNELS:
-                try:
-                    stream_url = await fetch_stream_url(channel)
-                    set_cached_url(channel, stream_url)
-                    record_link(channel, stream_url)
-                except Exception as e:
-                    print(f"[ERROR] Failed to update {channel}: {e}")
-            await asyncio.sleep(7200)  # wait 2 hours
+                meta = get_cached_meta(channel)
+                expiry = meta.get("expiry", 0)
+                if expiry < int(asyncio.get_event_loop().time()):
+                    try:
+                        stream_url = await fetch_stream_url(channel)
+                        set_cached_url(channel, stream_url)
+                        record_link(channel, stream_url)
+                    except Exception as e:
+                        print(f"[ERROR] Failed to update {channel}: {e}")
+            await asyncio.sleep(7200)  # 2 hours
 
     asyncio.create_task(auto_check_loop())
 
