@@ -1,32 +1,21 @@
-from datetime import datetime
-import logging
+from datetime import datetime, timedelta
 
-logger = logging.getLogger(__name__)
-cache_store = {}
+CACHE = {}
 
-CACHE_DURATION = 6 * 60 * 60  # 6 hours in seconds
+def get_cached_url(channel: str):
+    entry = CACHE.get(channel)
+    if not entry:
+        return None
+    if entry["expires_at"] < datetime.utcnow():
+        return None
+    entry["requests"] = entry.get("requests", 0) + 1
+    return entry
 
-def set_cached_url(channel, url):
-    now = int(datetime.utcnow().timestamp())
-    expiry = now + CACHE_DURATION
-    cache_store[channel] = {
+def set_cached_url(channel: str, url: str, ttl: int = 21600):
+    now = datetime.utcnow()
+    CACHE[channel] = {
         "url": url,
-        "expiry": expiry,
         "cached_at": now,
-        "validity": CACHE_DURATION,
+        "expires_at": now + timedelta(seconds=ttl),
         "requests": 0
     }
-    logger.info(f"[CACHE SET] {channel} | forced expiry: {expiry} | validity: {CACHE_DURATION}s")
-
-def get_cached_url(channel):
-    entry = cache_store.get(channel)
-    now = int(datetime.utcnow().timestamp())
-    if entry and entry["expiry"] > now:
-        entry["requests"] += 1
-        logger.info(f"[CACHE HIT] {channel} | count: {entry['requests']} | expires in {entry['expiry'] - now}s")
-        return entry["url"]
-    logger.info(f"[CACHE MISS] {channel}")
-    return None
-
-def get_cached_meta(channel):
-    return cache_store.get(channel, {})
