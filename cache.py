@@ -1,27 +1,22 @@
 from datetime import datetime
-import re
 import logging
 
 logger = logging.getLogger(__name__)
 cache_store = {}
 
-def extract_expiry(url):
-    match = re.search(r"[?&]exp=(\d+)", url)
-    if match:
-        return int(match.group(1))
-    return int(datetime.utcnow().timestamp()) + 3600
+CACHE_DURATION = 6 * 60 * 60  # 6 hours in seconds
 
 def set_cached_url(channel, url):
-    expiry = extract_expiry(url)
     now = int(datetime.utcnow().timestamp())
-    validity = expiry - now
+    expiry = now + CACHE_DURATION
     cache_store[channel] = {
         "url": url,
         "expiry": expiry,
-        "validity": validity,
+        "cached_at": now,
+        "validity": CACHE_DURATION,
         "requests": 0
     }
-    logger.info(f"[CACHE SET] {channel} | expiry: {expiry} | validity: {validity}s")
+    logger.info(f"[CACHE SET] {channel} | forced expiry: {expiry} | validity: {CACHE_DURATION}s")
 
 def get_cached_url(channel):
     entry = cache_store.get(channel)
