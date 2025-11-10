@@ -9,7 +9,7 @@ CHANNELS = ["ITV", "ITV2", "ITV3", "ITV4", "ITVBe"]
 def get_dashboard_data():
     data = {"streams": []}
     for channel in CHANNELS:
-        entry = get_cached_url(channel)
+        entry = peek_cached_entry(channel)
         if entry:
             next_refresh = entry["cached_at"] + timedelta(seconds=REFRESH_INTERVAL)
             data["streams"].append({
