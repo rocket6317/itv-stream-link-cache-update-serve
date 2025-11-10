@@ -1,7 +1,7 @@
 import asyncio
 import logging
 import os
-from fastapi import FastAPI, Request, HTTPException
+from fastapi import FastAPI, Request, HTTPException, Depends
 from fastapi.responses import RedirectResponse
 from fastapi.templating import Jinja2Templates
 from fastapi.security import HTTPBasic, HTTPBasicCredentials
@@ -36,13 +36,16 @@ async def redirect_itv(channel: str):
     return RedirectResponse(url)
 
 @app.get("/dashboard")
-async def dashboard(request: Request, credentials: HTTPBasicCredentials = security):
+async def dashboard(
+    request: Request,
+    credentials: HTTPBasicCredentials = Depends(security)
+):
     check_auth(credentials)
     data = get_dashboard_data()
     return templates.TemplateResponse("dashboard.html", {"request": request, "data": data})
 
 @app.get("/dashboard/json")
-async def dashboard_json(credentials: HTTPBasicCredentials = security):
+async def dashboard_json(credentials: HTTPBasicCredentials = Depends(security)):
     check_auth(credentials)
     return get_dashboard_data()
 
