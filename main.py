@@ -19,7 +19,7 @@ logger = logging.getLogger("uvicorn")
 load_dotenv("stack.env")
 USERNAME = os.getenv("DASHBOARD_USER")
 PASSWORD = os.getenv("DASHBOARD_PASS")
-REFRESH_INTERVAL = int(os.getenv("REFRESH_INTERVAL", "21300"))  # 5h55m default
+REFRESH_INTERVAL = int(os.getenv("REFRESH_INTERVAL", "21300"))  # default: 5h55m
 
 CHANNELS = ["ITV", "ITV2", "ITV3", "ITV4", "ITVBe"]
 
@@ -33,9 +33,6 @@ async def redirect_itv(channel: str):
     if not url:
         url = await fetch_stream_url(channel)
         set_cached_url(channel, url)
-        logger.info(f"[CACHE SET] {channel}")
-    else:
-        logger.info(f"[CACHE HIT] {channel}")
     return RedirectResponse(url)
 
 @app.get("/dashboard")
