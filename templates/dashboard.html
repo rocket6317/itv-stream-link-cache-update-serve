@@ -15,12 +15,13 @@
 <body>
     <h1>ITV Redirect Dashboard</h1>
     <table>
-        <tr><th>Channel</th><th>Expires In</th><th>Expires At</th><th>URL</th></tr>
+        <tr><th>Channel</th><th>Expires In</th><th>Expires At</th><th>Requests</th><th>URL</th></tr>
         {% for stream in data.streams %}
         <tr>
             <td>{{ stream.channel }}</td>
             <td>{{ stream.expires_in }}</td>
             <td>{{ stream.expires_at }}</td>
+            <td>{{ stream.requests }}</td>
             <td><a href="{{ stream.url }}" target="_blank">Link</a></td>
         </tr>
         {% endfor %}
