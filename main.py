@@ -1,5 +1,6 @@
 import os
 import secrets
+import logging
 from fastapi import FastAPI, Request, Response, Depends, HTTPException, status
 from fastapi.responses import RedirectResponse, HTMLResponse
 from fastapi.templating import Jinja2Templates
@@ -7,6 +8,13 @@ from fastapi.security import HTTPBasic, HTTPBasicCredentials
 from cache import get_cached_url, set_cached_url
 from client import fetch_stream_url
 from dashboard import record_link, get_dashboard_data
+
+# ✅ Global logging config
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s [%(levelname)s] %(message)s"
+)
+logger = logging.getLogger(__name__)
 
 app = FastAPI()
 templates = Jinja2Templates(directory="templates")
