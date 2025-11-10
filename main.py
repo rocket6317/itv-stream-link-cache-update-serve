@@ -1,11 +1,11 @@
 import os
 import secrets
-import asyncio
+from datetime import datetime
 from fastapi import FastAPI, Request, Response, Depends, HTTPException, status
 from fastapi.responses import RedirectResponse, HTMLResponse
 from fastapi.templating import Jinja2Templates
 from fastapi.security import HTTPBasic, HTTPBasicCredentials
-from cache import get_cached_url, set_cached_url, get_cached_meta
+from cache import get_cached_url, set_cached_url
 from client import fetch_stream_url
 from dashboard import record_link, get_dashboard_data
 
@@ -27,24 +27,6 @@ def authenticate(credentials: HTTPBasicCredentials = Depends(security)):
             detail="Invalid credentials",
             headers={"WWW-Authenticate": "Basic"},
         )
-
-@app.on_event("startup")
-async def start_background_tasks():
-    async def auto_check_loop():
-        while True:
-            for channel in CHANNELS:
-                meta = get_cached_meta(channel)
-                expiry = meta.get("expiry", 0)
-                if expiry < int(asyncio.get_event_loop().time()):
-                    try:
-                        stream_url = await fetch_stream_url(channel)
-                        set_cached_url(channel, stream_url)
-                        record_link(channel, stream_url)
-                    except Exception as e:
-                        print(f"[ERROR] Failed to update {channel}: {e}")
-            await asyncio.sleep(7200)  # 2 hours
-
-    asyncio.create_task(auto_check_loop())
 
 @app.get("/itvx")
 async def redirect_itv(request: Request):
