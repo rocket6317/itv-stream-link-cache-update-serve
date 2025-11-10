@@ -28,10 +28,12 @@ def check_auth(credentials: HTTPBasicCredentials):
 
 @app.get("/itvx")
 async def redirect_itv(channel: str):
-    url = get_cached_url(channel)
-    if not url:
+    entry = get_cached_url(channel)
+    if not entry:
         url = await fetch_stream_url(channel)
         set_cached_url(channel, url)
+    else:
+        url = entry["url"]
     return RedirectResponse(url, status_code=307)
 
 @app.get("/dashboard")
