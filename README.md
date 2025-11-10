@@ -20,11 +20,11 @@ Use this tool to generate valid, auto-refreshing stream links for ITV channels. 
 After getting Flask (Gunicorn) up and running use below links in your m3u file to generate stream links
 Replace `your-server-ip` with your actual server IP or domain name.
 
-**http://your-server-ip:1995/itvx?channel=ITV
-http://your-server-ip:1995/itvx?channel=ITV2
-http://your-server-ip:1995/itvx?channel=ITV3
-http://your-server-ip:1995/itvx?channel=ITV4
-http://your-server-ip:1995/itvx?channel=ITVBe**
+- http://your-server-ip:1995/itvx?channel=ITV
+- http://your-server-ip:1995/itvx?channel=ITV2
+- http://your-server-ip:1995/itvx?channel=ITV3
+- http://your-server-ip:1995/itvx?channel=ITV4
+- http://your-server-ip:1995/itvx?channel=ITVBe
 
 These links redirect to the latest valid MPD stream for each channel.
 
