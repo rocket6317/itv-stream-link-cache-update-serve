@@ -2,14 +2,12 @@ import time
 import logging
 import difflib
 from datetime import datetime
-import threading
+from cache import get_cached_meta
 
 logger = logging.getLogger(__name__)
 
 latest_links = {}
 link_history = {}
-
-CHANNELS = ["ITV", "ITV2", "ITV3", "ITV4", "ITVBe"]
 
 def record_link(channel: str, new_url: str):
     current_url = latest_links.get(channel)
@@ -38,7 +36,9 @@ def get_dashboard_data():
         "history": {},
         "diffs": {},
         "counts": {},
-        "elapsed": {}
+        "elapsed": {},
+        "expiry": {},
+        "validity": {}
     }
     now = datetime.now()
     for channel, history in link_history.items():
@@ -57,16 +57,8 @@ def get_dashboard_data():
             data["diffs"][channel] = highlight_diff(old, new)
         else:
             data["diffs"][channel] = f"<b>{history[-1]['url']}</b>"
-    return data
 
-def auto_check_loop(fetch_func, interval_seconds=7200):
-    def loop():
-        while True:
-            for channel in CHANNELS:
-                try:
-                    new_url = fetch_func(channel)
-                    record_link(channel, new_url)
-                except Exception as e:
-                    logger.warning(f"[AUTO CHECK ERROR] {channel}: {e}")
-            time.sleep(interval_seconds)
-    threading.Thread(target=loop, daemon=True).start()
+        meta = get_cached_meta(channel)
+        data["expiry"][channel] = meta.get("expiry", 0)
+        data["validity"][channel] = meta.get("validity", 0)
+    return data
