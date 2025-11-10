@@ -19,7 +19,8 @@ logger = logging.getLogger("uvicorn")
 load_dotenv("stack.env")
 USERNAME = os.getenv("DASHBOARD_USER")
 PASSWORD = os.getenv("DASHBOARD_PASS")
-REFRESH_INTERVAL = int(os.getenv("REFRESH_INTERVAL", "21300"))  # default: 5h55m
+REFRESH_INTERVAL = int(os.getenv("REFRESH_INTERVAL", "21300"))
+BASE_URL = os.getenv("BASE_URL", "https://example.com")
 
 CHANNELS = ["ITV", "ITV2", "ITV3", "ITV4", "ITVBe"]
 
@@ -69,7 +70,7 @@ async def master_playlist():
     lines = ["#EXTM3U"]
     for channel in CHANNELS:
         lines.append(f"#EXTINF:-1 tvg-id=\"{channel}\" group-title=\"ITV\", {channel}")
-        lines.append(f"https://py.273272.xyz/playlist/{channel}.m3u8")
+        lines.append(f"{BASE_URL}/playlist/{channel}.m3u8")
     return PlainTextResponse("\n".join(lines), media_type="application/x-mpegURL")
 
 @app.on_event("startup")
