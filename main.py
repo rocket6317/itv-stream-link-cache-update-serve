@@ -1,6 +1,5 @@
 import os
 import secrets
-from datetime import datetime
 from fastapi import FastAPI, Request, Response, Depends, HTTPException, status
 from fastapi.responses import RedirectResponse, HTMLResponse
 from fastapi.templating import Jinja2Templates
@@ -31,6 +30,9 @@ def authenticate(credentials: HTTPBasicCredentials = Depends(security)):
 @app.get("/itvx")
 async def redirect_itv(request: Request):
     channel = request.query_params.get("channel", "ITV")
+    if channel not in CHANNELS:
+        raise HTTPException(status_code=400, detail="Invalid channel")
+
     cached_url = get_cached_url(channel)
     if cached_url:
         record_link(channel, cached_url)
