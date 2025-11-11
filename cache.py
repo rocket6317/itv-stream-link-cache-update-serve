@@ -1,14 +1,21 @@
 from datetime import datetime, timedelta
 
 CACHE = {}
+RECENT_REQUESTS = {}  # (channel, ip) → timestamp
 
-def get_cached_url(channel: str):
+def get_cached_url(channel: str, ip: str = None):
     entry = CACHE.get(channel)
-    if not entry:
+    if not entry or entry["expires_at"] < datetime.utcnow():
         return None
-    if entry["expires_at"] < datetime.utcnow():
-        return None
-    entry["requests"] = entry.get("requests", 0) + 1
+
+    if ip:
+        key = (channel, ip)
+        now = datetime.utcnow()
+        last = RECENT_REQUESTS.get(key)
+        if not last or (now - last).total_seconds() > 2:  # ⏱️ 2-second window
+            entry["requests"] = entry.get("requests", 0) + 1
+            RECENT_REQUESTS[key] = now
+
     return entry
 
 def set_cached_url(channel: str, url: str, ttl: int = 21600):
