@@ -8,7 +8,7 @@ from fastapi.security import HTTPBasic, HTTPBasicCredentials
 from starlette.status import HTTP_401_UNAUTHORIZED
 from dotenv import load_dotenv
 from dashboard import get_dashboard_data
-from cache import get_cached_url, set_cached_url
+from cache import get_cached_url, set_cached_url, peek_cached_entry
 from client import fetch_stream_url
 
 app = FastAPI()
