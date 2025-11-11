@@ -26,9 +26,12 @@ def check_auth(credentials: HTTPBasicCredentials):
     if credentials.username != USERNAME or credentials.password != PASSWORD:
         raise HTTPException(status_code=HTTP_401_UNAUTHORIZED)
 
+from fastapi import Request
+
 @app.get("/itvx")
-async def redirect_itv(channel: str):
-    entry = get_cached_url(channel)  # ← this increments request count
+async def redirect_itv(channel: str, request: Request):
+    ip = request.client.host
+    entry = get_cached_url(channel, ip)
     if entry:
         return RedirectResponse(entry["url"], status_code=302)
     raise HTTPException(status_code=503, detail="Stream not ready or expired")
