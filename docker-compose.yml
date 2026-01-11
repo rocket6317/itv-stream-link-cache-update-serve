@@ -7,3 +7,6 @@ services:
       - "1995:8000"
     env_file:
       - stack.env
+    volumes:
+      - ./stack.env:/app/stack.env:ro
+      - ./change_log.json:/app/change_log.json
