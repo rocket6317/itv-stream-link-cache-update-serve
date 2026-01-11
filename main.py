@@ -26,7 +26,7 @@ templates = Jinja2Templates(directory="templates")
 security = HTTPBasic()
 logger = logging.getLogger("uvicorn")
 
-load_dotenv("stack.env")
+load_dotenv("/app/stack.env")
 USERNAME = os.getenv("DASHBOARD_USER")
 PASSWORD = os.getenv("DASHBOARD_PASS")
 REFRESH_INTERVAL = int(os.getenv("REFRESH_INTERVAL", "21300"))
