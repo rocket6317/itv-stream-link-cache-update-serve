@@ -293,9 +293,34 @@ def signal_app_to_reload():
     try:
         with open(flag_file, 'w') as f:
             f.write(str(time.time()))
-        print(f"✅ Created reload signal file (file watcher will detect changes)")
+        print(f"✅ Created reload signal file")
     except Exception as e:
         print(f"⚠️  Could not create reload signal: {e}")
+
+
+def restart_container():
+    """Restart the Docker container to pick up new token."""
+    import subprocess
+    try:
+        # Find and restart the ITV container
+        result = subprocess.run(
+            ['docker', 'ps', '--filter', 'name=itv', '--format', '{{.Names}}'],
+            capture_output=True,
+            text=True,
+            timeout=10
+        )
+        container_name = result.stdout.strip()
+        if container_name:
+            subprocess.run(
+                ['docker', 'restart', container_name],
+                capture_output=True,
+                timeout=30
+            )
+            print(f"✅ Restarted container: {container_name}")
+        else:
+            print("⚠️  Could not find ITV container to restart")
+    except Exception as e:
+        print(f"⚠️  Could not restart container: {e}")
 
 
 def main():
@@ -326,6 +351,7 @@ def main():
     # Update env file
     if update_env_file(token):
         signal_app_to_reload()
+        restart_container()
 
         print()
         print("=" * 60)
