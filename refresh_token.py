@@ -36,10 +36,10 @@ from selenium.webdriver.support import expected_conditions as EC
 from selenium.common.exceptions import TimeoutException
 
 # Configuration
-ENV_FILE = os.path.join(os.path.dirname(__file__), 'stack.env')
+# Paths for DietPi deployment
+ENV_FILE = '/home/dietpi/itv/stack.env'
 ITV_URL = "https://www.itv.com/watch"
-HEADLESS = os.getenv('HEADLESS', 'true').lower() == 'true'
-CHROME_PROFILE_DIR = os.path.join(os.path.dirname(__file__), '.chrome_profile')
+CHROME_PROFILE_DIR = '/home/dietpi/itv/.chrome_profile'
 
 
 def setup_chrome_options():
@@ -51,7 +51,10 @@ def setup_chrome_options():
     profile_dir.mkdir(exist_ok=True)
     options.add_argument(f'--user-data-dir={CHROME_PROFILE_DIR}')
 
-    if HEADLESS:
+    # Check HEADLESS environment variable dynamically (not at import time)
+    headless = os.getenv('HEADLESS', 'true').lower() == 'true'
+
+    if headless:
         options.add_argument('--headless=new')
         options.add_argument('--disable-gpu')
         options.add_argument('--no-sandbox')
@@ -161,13 +164,14 @@ def login_and_extract_token():
     # Enable performance logging to capture network requests
     options.set_capability('goog:loggingPrefs', {'performance': 'ALL'})
 
-    # Find chromedriver
+    # Find chromedriver (Linux/DietPi paths)
     service = None
     try:
         # Try common chromedriver locations
         driver_paths = [
             '/usr/bin/chromedriver',
             '/usr/local/bin/chromedriver',
+            '/opt/homebrew/bin/chromedriver',  # macOS Homebrew
             'chromedriver'
         ]
 
@@ -176,13 +180,18 @@ def login_and_extract_token():
                 service = Service(path)
                 break
 
-        driver = webdriver.Chrome(service=service, options=options)
+        # Initialize driver (with or without service)
+        if service:
+            driver = webdriver.Chrome(service=service, options=options)
+        else:
+            # Let Selenium find chromedriver automatically (works on macOS)
+            driver = webdriver.Chrome(options=options)
     except Exception as e:
         print(f"❌ Error starting Chrome: {e}")
         print()
-        print("Please install chromium and chromedriver on your DietPi:")
-        print("  sudo apt install chromium-chromedriver")
-        print("  sudo apt install chromium")
+        print("Please install chromedriver:")
+        print("  macOS: brew install chromedriver")
+        print("  Linux: sudo apt install chromium-chromedriver")
         return None
 
     try:
@@ -233,6 +242,15 @@ def login_and_extract_token():
             token = extract_token_from_page(driver)
 
         if token:
+            # Keep browser open for a moment in interactive mode for verification
+            if not os.getenv('HEADLESS', 'true').lower() == 'true':
+                print()
+                print("✅ Token found! Keeping browser open for 10 seconds for verification...")
+                print("   (Close it early if you want)")
+                try:
+                    time.sleep(10)
+                except KeyboardInterrupt:
+                    print("\n   Browser closed by user")
             return token
         else:
             print("❌ Failed to extract token")
