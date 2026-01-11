@@ -1,7 +1,6 @@
 import asyncio
 import logging
 import os
-from pathlib import Path
 from fastapi import FastAPI, Request, HTTPException, Depends
 from fastapi.responses import RedirectResponse, PlainTextResponse
 from fastapi.templating import Jinja2Templates
@@ -142,12 +141,6 @@ async def token_status(credentials: HTTPBasicCredentials = Depends(security)):
 
 @app.on_event("startup")
 async def startup_event():
-    # Start file watcher for stack.env
-    env_file_path = Path("/app/stack.env")
-    if env_file_path.exists():
-        logger.info(f"[STARTUP] Watching {env_file_path} for changes...")
-        asyncio.create_task(watch_env_file(env_file_path))
-
     # Pre-fetch channels
     for channel in CHANNELS:
         try:
@@ -157,49 +150,6 @@ async def startup_event():
         except Exception as e:
             logger.warning(f"[STARTUP ERROR] {channel}: {e}")
     asyncio.create_task(auto_refresh_loop())
-
-async def watch_env_file(env_file_path: Path):
-    """Watch for file modifications and reload environment."""
-    last_mtime = env_file_path.stat().st_mtime
-
-    while True:
-        try:
-            current_mtime = env_file_path.stat().st_mtime
-            if current_mtime != last_mtime:
-                logger.info(f"[FILE WATCH] stack.env modified, reloading...")
-
-                # Reload environment
-                from dotenv import load_dotenv
-                load_dotenv("stack.env", override=True)
-
-                # Clear cache
-                from cache import CACHE
-                old_size = len(CACHE)
-                CACHE.clear()
-
-                # Log the change
-                if CHANGE_LOG_AVAILABLE:
-                    from change_log import log_change
-                    log_change('token_refresh', 'ALL', {
-                        'trigger': 'auto_file_watch',
-                        'cache_cleared': old_size
-                    })
-
-                logger.info(f"[FILE WATCH] Environment reloaded, cache cleared ({old_size} entries)")
-                last_mtime = current_mtime
-
-                # Test new token
-                try:
-                    test_url = await fetch_stream_url("ITV")
-                    logger.info(f"[FILE WATCH] New token validated successfully")
-                except Exception as e:
-                    logger.error(f"[FILE WATCH] New token failed validation: {e}")
-
-            await asyncio.sleep(2)
-
-        except Exception as e:
-            logger.error(f"[FILE WATCH] Error watching file: {e}")
-            await asyncio.sleep(5)
 
 async def auto_refresh_loop():
     while True:
