@@ -293,34 +293,9 @@ def signal_app_to_reload():
     try:
         with open(flag_file, 'w') as f:
             f.write(str(time.time()))
-        print(f"✅ Created reload signal file")
+        print(f"✅ Created reload signal file (file watcher will detect changes)")
     except Exception as e:
         print(f"⚠️  Could not create reload signal: {e}")
-
-
-def notify_app_container():
-    """Notify the running app container that token has been updated."""
-    import httpx
-
-    username = os.getenv('DASHBOARD_USER')
-    password = os.getenv('DASHBOARD_PASS')
-
-    if not username or not password:
-        print("⚠️  Warning: DASHBOARD_USER or DASHBOARD_PASS not set, skipping notification")
-        return
-
-    try:
-        response = httpx.post(
-            'http://localhost:1995/admin/reload-token',
-            auth=(username, password),
-            timeout=10
-        )
-        if response.status_code == 200:
-            print("✅ Notified app to reload token")
-        else:
-            print(f"⚠️  App notification failed: {response.status_code}")
-    except Exception as e:
-        print(f"⚠️  Could not notify app: {e}")
 
 
 def main():
@@ -351,7 +326,6 @@ def main():
     # Update env file
     if update_env_file(token):
         signal_app_to_reload()
-        notify_app_container()
 
         print()
         print("=" * 60)
