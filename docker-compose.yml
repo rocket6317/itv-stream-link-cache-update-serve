@@ -6,6 +6,6 @@ services:
     ports:
       - "1995:8000"
     env_file:
-      - /home/dietpi/itv/stack.env
+      - stack.env
     volumes:
       - ./change_log.json:/app/change_log.json
