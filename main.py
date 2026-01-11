@@ -1,6 +1,7 @@
 import asyncio
 import logging
 import os
+from pathlib import Path
 from fastapi import FastAPI, Request, HTTPException, Depends
 from fastapi.responses import RedirectResponse, PlainTextResponse
 from fastapi.templating import Jinja2Templates
@@ -99,8 +100,55 @@ async def reload_token(
 
     return {"status": "success", "message": "Token reloaded from environment"}
 
+@app.get("/admin/token-status")
+async def token_status(credentials: HTTPBasicCredentials = Depends(security)):
+    """Get current token status including expiration time."""
+    check_auth(credentials)
+
+    import base64
+    import json
+    from datetime import datetime
+
+    token = os.getenv('ITV_ACCESS_TOKEN', '')
+    if not token:
+        return {'valid': False, 'error': 'No token found'}
+
+    try:
+        parts = token.split('.')
+        if len(parts) >= 2:
+            payload = parts[1]
+            padding = 4 - len(payload) % 4
+            if padding != 4:
+                payload += '=' * padding
+            decoded = base64.urlsafe_b64decode(payload)
+            data = json.loads(decoded)
+
+            if 'exp' in data:
+                exp_timestamp = data['exp']
+                exp_datetime = datetime.fromtimestamp(exp_timestamp)
+                now = datetime.utcnow()
+                hours_remaining = (exp_datetime - now).total_seconds() / 3600
+
+                return {
+                    'valid': True,
+                    'expires_at': exp_datetime.isoformat(),
+                    'hours_remaining': round(hours_remaining, 2),
+                    'warning': hours_remaining < 6
+                }
+    except Exception as e:
+        return {'valid': False, 'error': f'Failed to decode token: {str(e)}'}
+
+    return {'valid': True, 'warning': 'Unknown expiration'}
+
 @app.on_event("startup")
 async def startup_event():
+    # Start file watcher for stack.env
+    env_file_path = Path("/app/stack.env")
+    if env_file_path.exists():
+        logger.info(f"[STARTUP] Watching {env_file_path} for changes...")
+        asyncio.create_task(watch_env_file(env_file_path))
+
+    # Pre-fetch channels
     for channel in CHANNELS:
         try:
             url = await fetch_stream_url(channel)
@@ -109,6 +157,49 @@ async def startup_event():
         except Exception as e:
             logger.warning(f"[STARTUP ERROR] {channel}: {e}")
     asyncio.create_task(auto_refresh_loop())
+
+async def watch_env_file(env_file_path: Path):
+    """Watch for file modifications and reload environment."""
+    last_mtime = env_file_path.stat().st_mtime
+
+    while True:
+        try:
+            current_mtime = env_file_path.stat().st_mtime
+            if current_mtime != last_mtime:
+                logger.info(f"[FILE WATCH] stack.env modified, reloading...")
+
+                # Reload environment
+                from dotenv import load_dotenv
+                load_dotenv("stack.env", override=True)
+
+                # Clear cache
+                from cache import CACHE
+                old_size = len(CACHE)
+                CACHE.clear()
+
+                # Log the change
+                if CHANGE_LOG_AVAILABLE:
+                    from change_log import log_change
+                    log_change('token_refresh', 'ALL', {
+                        'trigger': 'auto_file_watch',
+                        'cache_cleared': old_size
+                    })
+
+                logger.info(f"[FILE WATCH] Environment reloaded, cache cleared ({old_size} entries)")
+                last_mtime = current_mtime
+
+                # Test new token
+                try:
+                    test_url = await fetch_stream_url("ITV")
+                    logger.info(f"[FILE WATCH] New token validated successfully")
+                except Exception as e:
+                    logger.error(f"[FILE WATCH] New token failed validation: {e}")
+
+            await asyncio.sleep(2)
+
+        except Exception as e:
+            logger.error(f"[FILE WATCH] Error watching file: {e}")
+            await asyncio.sleep(5)
 
 async def auto_refresh_loop():
     while True:
