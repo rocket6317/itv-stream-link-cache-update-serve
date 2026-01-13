@@ -35,6 +35,28 @@
         a:hover {
             text-decoration: underline;
         }
+        .progress-bar {
+            width: 100px;
+            height: 8px;
+            background: #333;
+            border-radius: 4px;
+            overflow: hidden;
+            margin-top: 4px;
+        }
+        .progress-fill {
+            height: 100%;
+            transition: width 0.3s ease;
+        }
+        .progress-green { background: #4caf50; }
+        .progress-yellow { background: #ff9800; }
+        .progress-red { background: #f44336; }
+        .url-expiry {
+            font-size: 11px;
+        }
+        .url-expiry-detail {
+            color: #888;
+            font-size: 10px;
+        }
     </style>
     <script>
         setTimeout(() => location.reload(), 60000); // auto-refresh every 60s
@@ -54,8 +76,10 @@
             <tr>
                 <th>Channel</th>
                 <th>Cached At</th>
-                <th>Expires At</th>
+                <th>Cache Expires At</th>
                 <th>Next Refresh</th>
+                <th>URL Token Expires</th>
+                <th>URL Age</th>
                 <th>Requests</th>
                 <th>URL</th>
             </tr>
@@ -67,6 +91,36 @@
                 <td>{{ stream.cached_at }}</td>
                 <td>{{ stream.expires_at }}</td>
                 <td>{{ stream.next_refresh_at }}</td>
+                <td>
+                    {% if stream.url_age %}
+                    <div class="url-expiry">
+                        {% if stream.url_age.is_expired %}
+                            <span style="color: #f44336;">EXPIRED</span>
+                        {% elif stream.url_age.remaining_hours < 2 %}
+                            <span style="color: #f44336;">{{ "%.1f"|format(stream.url_age.remaining_hours) }}h</span>
+                        {% elif stream.url_age.remaining_hours < 12 %}
+                            <span style="color: #ff9800;">{{ "%.1f"|format(stream.url_age.remaining_hours) }}h</span>
+                        {% else %}
+                            <span style="color: #4caf50;">{{ "%.1f"|format(stream.url_age.remaining_hours) }}h</span>
+                        {% endif %}
+                    </div>
+                    <div class="url-expiry-detail">
+                        {{ stream.url_age.expires_at.strftime("%H:%M") }}
+                    </div>
+                    {% else %}
+                        <span style="color: #888;">N/A</span>
+                    {% endif %}
+                </td>
+                <td>
+                    {% if stream.url_age %}
+                    <div class="progress-bar">
+                        <div class="progress-fill {% if stream.url_age.percent_used > 80 %}progress-red{% elif stream.url_age.percent_used > 50 %}progress-yellow{% else %}progress-green{% endif %}" style="width: {{ stream.url_age.percent_used }}%;"></div>
+                    </div>
+                    <div class="url-expiry-detail">{{ "%.0f"|format(stream.url_age.percent_used) }}% used</div>
+                    {% else %}
+                        -
+                    {% endif %}
+                </td>
                 <td>{{ stream.requests }}</td>
                 <td><a href="{{ stream.url }}" target="_blank">Link</a></td>
             </tr>
