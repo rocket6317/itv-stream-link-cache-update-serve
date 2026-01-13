@@ -3,6 +3,7 @@ version: '3.8'
 services:
   itv:
     build: .
+    restart: unless-stopped
     ports:
       - "1995:8000"
     volumes:
