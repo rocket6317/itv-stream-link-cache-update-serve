@@ -13,13 +13,14 @@ from client import fetch_stream_url
 
 # Try to import change_log, handle if not available
 try:
-    from change_log import get_logs, get_token_history, get_url_history
+    from change_log import get_logs, get_token_history, get_url_history, analyze_url_changes
     CHANGE_LOG_AVAILABLE = True
 except ImportError:
     CHANGE_LOG_AVAILABLE = False
     def get_logs(limit=100): return []
     def get_token_history(): return None
     def get_url_history(channel=None): return []
+    def analyze_url_changes(): return None
 
 app = FastAPI()
 templates = Jinja2Templates(directory="templates")
@@ -280,3 +281,11 @@ async def view_token_logs_json(credentials: HTTPBasicCredentials = Depends(secur
     """Get token refresh logs as JSON."""
     check_auth(credentials)
     return get_token_refresh_logs(500)
+
+@app.get("/url-analysis")
+async def url_analysis(credentials: HTTPBasicCredentials = Depends(security)):
+    """Analyze URL changes to determine if URLs change independently of tokens."""
+    check_auth(credentials)
+    if not CHANGE_LOG_AVAILABLE:
+        return {"error": "Change log module not available"}
+    return analyze_url_changes()
