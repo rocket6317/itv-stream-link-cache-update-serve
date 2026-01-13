@@ -1,0 +1,93 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Token Refresh Logs</title>
+    <style>
+        body {
+            background: #111;
+            color: #eee;
+            font-family: sans-serif;
+            margin: 0;
+            padding: 20px;
+        }
+        h1 {
+            margin-bottom: 20px;
+        }
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            table-layout: auto;
+        }
+        th, td {
+            padding: 10px;
+            text-align: left;
+            border-bottom: 1px solid #444;
+            vertical-align: top;
+        }
+        th {
+            background: #222;
+            font-weight: bold;
+        }
+        a {
+            color: #4fc3f7;
+            text-decoration: none;
+        }
+        a:hover {
+            text-decoration: underline;
+        }
+        .event-success {
+            color: #4caf50;
+        }
+        .event-error {
+            color: #f44336;
+        }
+        .event-warning {
+            color: #ff9800;
+        }
+        .event-info {
+            color: #2196f3;
+        }
+        .timestamp {
+            color: #888;
+            font-size: 0.9em;
+            white-space: nowrap;
+        }
+    </style>
+    <script>
+        setTimeout(() => location.reload(), 60000); // auto-refresh every 60s
+    </script>
+</head>
+<body>
+    <h1>Token Refresh Logs</h1>
+    <div style="margin-bottom: 20px;">
+        <a href="/dashboard" style="color: #4fc3f7; text-decoration: none; margin-right: 15px;">Dashboard</a>
+        <a href="/admin/token-status" style="color: #4fc3f7; text-decoration: none; margin-right: 15px;">Token Status</a>
+        <a href="/stats" style="color: #4fc3f7; text-decoration: none; margin-right: 15px;">Statistics</a>
+        <a href="/logs" style="color: #4fc3f7; text-decoration: none; margin-right: 15px;">Change Logs</a>
+        <a href="/token-logs" style="color: #4fc3f7; text-decoration: none;">Token Refresh Logs</a>
+    </div>
+
+    {% if logs %}
+    <table>
+        <thead>
+            <tr>
+                <th>Time</th>
+                <th>Event</th>
+                <th>Message</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for log in logs %}
+            <tr>
+                <td class="timestamp">{{ log.timestamp }}</td>
+                <td class="event-{{ log.event | event_class }}">{{ log.event }}</td>
+                <td>{{ log.message }}</td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+    {% else %}
+    <p style="color: #888;">No token refresh logs found. Run the token extraction script to populate logs.</p>
+    {% endif %}
+</body>
+</html>
