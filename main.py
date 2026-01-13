@@ -26,6 +26,22 @@ templates = Jinja2Templates(directory="templates")
 security = HTTPBasic()
 logger = logging.getLogger("uvicorn")
 
+# Custom Jinja2 filter for event styling
+def event_class_filter(event_type: str) -> str:
+    """Map event types to CSS classes for styling."""
+    if event_type in ['script_success', 'token_extracted', 'token_updated', 'container_restarted']:
+        return 'success'
+    elif event_type in ['chrome_timeout', 'page_timeout', 'token_failed', 'chrome_failed']:
+        return 'error'
+    elif event_type in ['token_info']:
+        return 'info'
+    else:
+        return 'warning'
+
+# Register the filter with Jinja2
+import jinja2
+templates.env.filters['event_class'] = event_class_filter
+
 load_dotenv("/app/stack.env")
 USERNAME = os.getenv("DASHBOARD_USER")
 PASSWORD = os.getenv("DASHBOARD_PASS")
@@ -231,3 +247,36 @@ async def debug_info():
         "templates_exist": os.path.exists('/app/templates/logs.html'),
         "files_in_app": os.listdir('/app') if os.path.exists('/app') else [],
     }
+
+def get_token_refresh_logs(limit=100):
+    """Read token refresh logs from the log file."""
+    import json
+    log_file = '/home/dietpi/itv/token_refresh.log'
+
+    if not os.path.exists(log_file):
+        return []
+
+    try:
+        with open(log_file, 'r') as f:
+            logs = json.load(f)
+        # Return last N entries, most recent first
+        return logs[-limit:][::-1]
+    except Exception as e:
+        logger.error(f"Error reading token refresh logs: {e}")
+        return []
+
+@app.get("/token-logs")
+async def view_token_logs(
+    request: Request,
+    credentials: HTTPBasicCredentials = Depends(security)
+):
+    """View token refresh logs."""
+    check_auth(credentials)
+    logs = get_token_refresh_logs(200)
+    return templates.TemplateResponse("token_logs.html", {"request": request, "logs": logs})
+
+@app.get("/token-logs/json")
+async def view_token_logs_json(credentials: HTTPBasicCredentials = Depends(security)):
+    """Get token refresh logs as JSON."""
+    check_auth(credentials)
+    return get_token_refresh_logs(500)
