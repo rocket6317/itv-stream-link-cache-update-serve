@@ -137,7 +137,7 @@ async def fetch_stream_url(channel: str) -> str:
                 log_change('url_error', channel, {'status': response.status_code, 'body': response.text[:500]})
             response.raise_for_status()
             url = response.json()['Playlist']['Video']['VideoLocations'][0]['Url']
-            log_change('url_refresh', channel, {'url': url[:200]})  # Log first 200 chars
+            log_change('url_refresh', channel, {'url': url})  # Log full URL
             return url
         except Exception as e:
             logger.error(f"Failed to fetch stream URL: {e}")
