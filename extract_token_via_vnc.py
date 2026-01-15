@@ -10,15 +10,39 @@ import websocket
 import json
 import requests
 import os
-from datetime import datetime
+from datetime import datetime, timezone
 
 LOG_FILE = '/home/dietpi/itv/token_refresh.log'
 MAX_LOG_ENTRIES = 500
+STACK_ENV = '/home/dietpi/itv/stack.env'
+
+def load_env_file(env_path=STACK_ENV):
+    """Load environment variables from a file without requiring dotenv."""
+    env_vars = {}
+    if os.path.exists(env_path):
+        with open(env_path, 'r') as f:
+            for line in f:
+                line = line.strip()
+                # Skip comments and empty lines
+                if not line or line.startswith('#'):
+                    continue
+                # Parse KEY=VALUE
+                if '=' in line:
+                    key, value = line.split('=', 1)
+                    env_vars[key.strip()] = value.strip()
+    return env_vars
+
+# Load env vars at module level for easy access
+ENV_VARS = load_env_file()
+
+def getenv(key, default=None):
+    """Get environment variable from both os.environ and our loaded env file."""
+    return os.getenv(key, ENV_VARS.get(key, default))
 
 def log_event(event_type, message):
     """Log an event to the token refresh log file."""
     log_entry = {
-        'timestamp': datetime.utcnow().isoformat() + 'Z',
+        'timestamp': datetime.now(timezone.utc).isoformat().replace('+00:00', 'Z'),
         'event': event_type,
         'message': message
     }
@@ -138,7 +162,7 @@ def start_chrome():
 def is_token_expired(token):
     """Check if token is expired or close to expiry."""
     if not token or not token.startswith('eyJ'):
-        return True
+        return True, 0
 
     try:
         import base64
@@ -153,8 +177,9 @@ def is_token_expired(token):
 
             if 'exp' in data:
                 exp_timestamp = data['exp']
-                exp_date = datetime.fromtimestamp(exp_timestamp)
-                now = datetime.utcnow()
+                # Make exp_date timezone-aware (UTC)
+                exp_date = datetime.fromtimestamp(exp_timestamp, tz=timezone.utc)
+                now = datetime.now(timezone.utc)
                 hours_remaining = (exp_date - now).total_seconds() / 3600
 
                 # Token is expired or has less than 2 hours
@@ -359,9 +384,9 @@ def force_token_refresh():
     print("Forcing token refresh...")
     log_event("token_refresh_needed", "Extracted token expired, forcing refresh")
 
-    # Get credentials from environment
-    email = os.getenv('ITVX_EMAIL') or os.getenv('ITV_EMAIL')
-    password = os.getenv('ITVX_PASSWORD') or os.getenv('ITV_PASSWORD')
+    # Get credentials from environment (checks both os.environ and stack.env file)
+    email = getenv('ITVX_EMAIL') or getenv('ITV_EMAIL')
+    password = getenv('ITVX_PASSWORD') or getenv('ITV_PASSWORD')
 
     if not email or not password:
         print("WARNING: ITVX_EMAIL and ITVX_PASSWORD not set in environment")
@@ -466,9 +491,9 @@ def main():
 
     log_event("script_start", "Token extraction script started")
 
-    # Load environment variables from stack.env (for credentials)
-    from dotenv import load_dotenv
-    load_dotenv('/home/dietpi/itv/stack.env')
+    # Reload env vars from stack.env in case they were updated
+    global ENV_VARS
+    ENV_VARS = load_env_file()
 
     # Make sure DISPLAY is set
     if not os.environ.get('DISPLAY'):
@@ -563,8 +588,8 @@ def main():
                 data = json.loads(decoded)
 
                 if 'exp' in data:
-                    exp_date = datetime.fromtimestamp(data['exp'])
-                    hours_left = (exp_date - datetime.utcnow()).total_seconds() / 3600
+                    exp_date = datetime.fromtimestamp(data['exp'], tz=timezone.utc)
+                    hours_left = (exp_date - datetime.now(timezone.utc)).total_seconds() / 3600
                     print(f"Token expires: {exp_date}")
                     print(f"Hours remaining: {hours_left:.1f}")
                     log_event("token_info", f"Token expires: {exp_date}, Hours remaining: {hours_left:.1f}")
