@@ -2,8 +2,19 @@ import httpx
 import os
 import json
 import logging
+import base64
+from datetime import datetime, timezone
 from fastapi import HTTPException
 from change_log import log_change
+
+# Try to import event_tracker, handle if not available
+try:
+    from event_tracker import log_event
+    EVENT_TRACKER_AVAILABLE = True
+except ImportError:
+    EVENT_TRACKER_AVAILABLE = False
+    def log_event(*args, **kwargs):
+        pass  # Stub implementation
 
 logger = logging.getLogger("uvicorn")
 
@@ -66,6 +77,55 @@ def get_cookies_and_user_id():
         if legacy_cookie:
             cookies['SyrenisCookieFormConsent_Itv.Session'] = legacy_cookie
 
+def get_token_age_hours(access_token):
+    """Calculate token age in hours from JWT expiration claim.
+
+    Returns:
+        Token age in hours, or None if token is invalid
+    """
+    if not access_token:
+        return None
+
+    try:
+        parts = access_token.split('.')
+        if len(parts) >= 2:
+            payload = parts[1]
+            padding = 4 - len(payload) % 4
+            if padding != 4:
+                payload += '=' * padding
+            decoded = base64.urlsafe_b64decode(payload)
+            data = json.loads(decoded)
+
+            if 'exp' in data:
+                exp_timestamp = data['exp']
+                now = datetime.now(timezone.utc).timestamp()
+                hours_remaining = (exp_timestamp - now) / 3600
+
+                # Estimate total token lifetime (usually ~24 hours for ITV)
+                # and calculate current age
+                estimated_lifetime_hours = 24
+                age_hours = estimated_lifetime_hours - hours_remaining
+                return max(0, age_hours)
+    except (json.JSONDecodeError, ValueError, KeyError):
+        pass
+
+    return None
+
+
+def extract_cdn(url):
+    """Extract CDN provider from URL."""
+    try:
+        if 'akamai' in url.lower():
+            return 'akamai'
+        elif 'fastly' in url.lower():
+            return 'fastly'
+        elif 'cloudflare' in url.lower():
+            return 'cloudflare'
+        return 'unknown'
+    except:
+        return 'unknown'
+
+
     return cookies, user_id, access_token
 
 def build_request_data(user_id=None, access_token=None):
@@ -114,11 +174,23 @@ def build_request_data(user_id=None, access_token=None):
 async def fetch_stream_url(channel: str) -> str:
     cookies, user_id, access_token = get_cookies_and_user_id()
 
+    # Log fetch start
+    if EVENT_TRACKER_AVAILABLE:
+        log_event('url_fetch_start', {'channel': channel})
+
     if not access_token:
+        if EVENT_TRACKER_AVAILABLE:
+            log_event('url_fetch_error_other', {
+                'channel': channel,
+                'error': 'No token configured'
+            }, severity='critical')
         raise HTTPException(
             status_code=500,
             detail="No ITV access token configured. Please add ITV_ACCESS_TOKEN to your .env file."
         )
+
+    # Calculate token age
+    token_age_hours = get_token_age_hours(access_token)
 
     # Build request data with the access token
     request_data = build_request_data(user_id, access_token)
@@ -132,14 +204,91 @@ async def fetch_stream_url(channel: str) -> str:
                 json=request_data,
             )
             logger.info(f"Response status: {response.status_code}")
-            if response.status_code != 200:
+
+            # Handle different status codes with event logging
+            if response.status_code == 401:
+                error_details = {
+                    'channel': channel,
+                    'token_age_hours': token_age_hours,
+                    'status': 401
+                }
+                if EVENT_TRACKER_AVAILABLE:
+                    log_event('url_fetch_error_401', error_details, severity='error')
+                logger.error(f"Response body: {response.text[:500]}")
+                log_change('url_error', channel, {'status': 401, 'body': response.text[:500]})
+                raise HTTPException(status_code=502, detail=f"ITV API returned 401 - token may be expired")
+
+            elif response.status_code == 403:
+                error_details = {
+                    'channel': channel,
+                    'token_age_hours': token_age_hours,
+                    'status': 403
+                }
+                if EVENT_TRACKER_AVAILABLE:
+                    log_event('url_fetch_error_403', error_details, severity='error')
+                logger.error(f"Response body: {response.text[:500]}")
+                log_change('url_error', channel, {'status': 403, 'body': response.text[:500]})
+                raise HTTPException(status_code=502, detail=f"ITV API returned 403 - access forbidden")
+
+            elif response.status_code == 502:
+                if EVENT_TRACKER_AVAILABLE:
+                    log_event('url_fetch_error_502', {
+                        'channel': channel,
+                        'token_age_hours': token_age_hours
+                    }, severity='error')
+                log_change('url_error', channel, {'status': 502})
+                raise HTTPException(status_code=502, detail="ITV API returned 502 Bad Gateway")
+
+            elif response.status_code == 503:
+                if EVENT_TRACKER_AVAILABLE:
+                    log_event('url_fetch_error_503', {
+                        'channel': channel,
+                        'token_age_hours': token_age_hours
+                    }, severity='error')
+                log_change('url_error', channel, {'status': 503})
+                raise HTTPException(status_code=502, detail="ITV API returned 503 Service Unavailable")
+
+            elif response.status_code != 200:
+                if EVENT_TRACKER_AVAILABLE:
+                    log_event('url_fetch_error_other', {
+                        'channel': channel,
+                        'status': response.status_code,
+                        'token_age_hours': token_age_hours
+                    }, severity='warning')
                 logger.error(f"Response body: {response.text[:500]}")
                 log_change('url_error', channel, {'status': response.status_code, 'body': response.text[:500]})
-            response.raise_for_status()
+                response.raise_for_status()
+
             url = response.json()['Playlist']['Video']['VideoLocations'][0]['Url']
+
+            # Log success with CDN info
+            if EVENT_TRACKER_AVAILABLE:
+                log_event('url_fetch_success', {
+                    'channel': channel,
+                    'token_age_hours': token_age_hours,
+                    'cdn': extract_cdn(url)
+                })
+
             log_change('url_refresh', channel, {'url': url})  # Log full URL
             return url
-        except Exception as e:
+
+        except httpx.TimeoutException:
+            if EVENT_TRACKER_AVAILABLE:
+                log_event('url_fetch_error_timeout', {
+                    'channel': channel,
+                    'token_age_hours': token_age_hours
+                }, severity='error')
+            log_change('url_error', channel, {'error': 'timeout'})
+            raise HTTPException(status_code=502, detail="ITV API request timed out")
+
+        except httpx.RequestError as e:
+            if EVENT_TRACKER_AVAILABLE:
+                log_event('url_fetch_error_other', {
+                    'channel': channel,
+                    'error': str(e),
+                    'error_type': 'RequestError',
+                    'token_age_hours': token_age_hours
+                }, severity='error')
             logger.error(f"Failed to fetch stream URL: {e}")
             log_change('url_error', channel, {'error': str(e)})
             raise HTTPException(status_code=502, detail=f"Failed to fetch stream URL: {e}")
