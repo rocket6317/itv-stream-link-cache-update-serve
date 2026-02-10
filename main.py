@@ -188,20 +188,71 @@ async def token_status(credentials: HTTPBasicCredentials = Depends(security)):
 
     return {'valid': True, 'warning': 'Unknown expiration'}
 
+# Token refresh restart marker file
+# Used to detect if container was just restarted by automation script
+# Marker is created in /app/logs which is a mounted volume from host
+RESTART_MARKER_FILE = Path("/app/logs/.automation_restart")
+# If marker exists and is younger than this many seconds, skip startup token refresh
+RESTART_MARKER_TTL = 300  # 5 minutes
+
+
+def should_skip_startup_refresh():
+    """Check if container was just restarted by automation script.
+
+    Returns True if the restart marker file exists and is recent.
+    This prevents a refresh loop when automation script restarts container.
+    """
+    if not RESTART_MARKER_FILE.exists():
+        return False
+
+    try:
+        import time
+        # Check file age
+        file_age = time.time() - RESTART_MARKER_FILE.stat().st_mtime
+        if file_age < RESTART_MARKER_TTL:
+            logger.info(f"[STARTUP] Skipping token refresh - automation restart detected ({file_age:.0f}s ago)")
+            return True
+        else:
+            # Marker is old, remove it
+            RESTART_MARKER_FILE.unlink(missing_ok=True)
+            return False
+    except Exception as e:
+        logger.warning(f"[STARTUP] Error checking restart marker: {e}")
+        return False
+
+
+def clear_restart_marker():
+    """Remove the restart marker file (called after successful startup)."""
+    try:
+        RESTART_MARKER_FILE.unlink(missing_ok=True)
+    except Exception:
+        pass
+
+
 @app.on_event("startup")
 async def startup_event():
     # Log service startup
     if EVENT_TRACKER_AVAILABLE:
         log_event('startup', {'channels': CHANNELS})
 
-    # Pre-fetch channels
-    for channel in CHANNELS:
-        try:
-            url = await fetch_stream_url(channel)
-            set_cached_url(channel, url)
-            logger.info(f"[STARTUP] Cached {channel}")
-        except Exception as e:
-            logger.warning(f"[STARTUP ERROR] {channel}: {e}")
+    # Check if this is an automation restart (skip refresh to prevent loops)
+    is_automation_restart = should_skip_startup_refresh()
+
+    # Only fetch URLs if token is valid, not an automation restart
+    if not is_automation_restart:
+        # Pre-fetch channels
+        for channel in CHANNELS:
+            try:
+                url = await fetch_stream_url(channel)
+                set_cached_url(channel, url)
+                logger.info(f"[STARTUP] Cached {channel}")
+            except Exception as e:
+                logger.warning(f"[STARTUP ERROR] {channel}: {e}")
+    else:
+        logger.info("[STARTUP] Skipping channel pre-fetch after automation restart")
+
+    # Clear the marker after startup checks complete
+    clear_restart_marker()
 
     asyncio.create_task(auto_refresh_loop())
     asyncio.create_task(log_scanner_loop())
