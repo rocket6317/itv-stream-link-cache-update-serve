@@ -1,0 +1,189 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Patterns & Recommendations - ITV Dashboard</title>
+    <style>
+        body {
+            background: #111;
+            color: #eee;
+            font-family: sans-serif;
+            margin: 0;
+            padding: 20px;
+        }
+        h1 {
+            margin-bottom: 20px;
+        }
+        .nav {
+            margin-bottom: 20px;
+        }
+        .nav a {
+            color: #4fc3f7;
+            text-decoration: none;
+            margin-right: 15px;
+        }
+        .nav a:hover {
+            text-decoration: underline;
+        }
+        .rec-card {
+            background: #222;
+            border-left: 4px solid #666;
+            padding: 15px;
+            margin-bottom: 15px;
+            border-radius: 4px;
+        }
+        .priority-critical {
+            border-left-color: #f44336;
+        }
+        .priority-high {
+            border-left-color: #ff9800;
+        }
+        .priority-medium {
+            border-left-color: #ffeb3b;
+        }
+        .priority-low {
+            border-left-color: #4caf50;
+        }
+        .priority-info {
+            border-left-color: #2196f3;
+        }
+        .rec-card h3 {
+            margin-top: 0;
+            color: #fff;
+        }
+        .rec-card p {
+            margin: 8px 0;
+        }
+        .rec-card code {
+            background: #333;
+            padding: 4px 8px;
+            border-radius: 3px;
+            font-family: monospace;
+        }
+        .action-needed {
+            color: #ff9800;
+            font-weight: bold;
+        }
+        .success {
+            color: #4caf50;
+        }
+        .stats-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+            gap: 15px;
+            margin-top: 20px;
+        }
+        .stat-card {
+            background: #222;
+            padding: 15px;
+            border-radius: 4px;
+        }
+        .stat-card h3 {
+            margin-top: 0;
+            color: #4fc3f7;
+        }
+        .stat-card p {
+            margin: 5px 0;
+        }
+        .error {
+            color: #f44336;
+        }
+        .timestamp {
+            color: #888;
+            font-size: 12px;
+        }
+    </style>
+    <script>
+        setTimeout(() => location.reload(), 60000);
+    </script>
+</head>
+<body>
+    <h1>Failure Patterns & Recommendations</h1>
+
+    <div class="nav">
+        <a href="/dashboard">Dashboard</a>
+        <a href="/patterns">Patterns</a>
+        <a href="/events">Events</a>
+        <a href="/stats">Statistics</a>
+        <a href="/logs">Change Logs</a>
+        <a href="/token-logs">Token Logs</a>
+    </div>
+
+    {% if not available %}
+        <div class="rec-card priority-high">
+            <h3>Event Tracker Not Available</h3>
+            <p>{{ error }}</p>
+        </div>
+    {% elif analysis.recommendations %}
+        <h2>Recommendations</h2>
+        {% for rec in analysis.recommendations %}
+        <div class="rec-card priority-{{ rec.priority }}">
+            <h3>{{ rec.category|title }}</h3>
+            <p><strong>Issue:</strong> {{ rec.issue }}</p>
+            <p><strong>Recommendation:</strong> {{ rec.recommendation }}</p>
+            {% if rec.suggested_cron %}
+            <p><code>{{ rec.suggested_cron }}</code></p>
+            {% endif %}
+            {% if rec.current_cron %}
+            <p><em>Current: {{ rec.current_cron }}</em></p>
+            {% endif %}
+            {% if rec.action %}
+            <p class="action-needed">Action: {{ rec.action }}</p>
+            {% endif %}
+        </div>
+        {% endfor %}
+    {% else %}
+        <div class="rec-card priority-info">
+            <h3>No Issues Detected</h3>
+            <p class="success">System is running smoothly.</p>
+        </div>
+    {% endif %}
+
+    {% if available and analysis %}
+    <div class="stats-grid">
+        {% if analysis.token_analysis %}
+        <div class="stat-card">
+            <h3>Token Lifetime</h3>
+            {% if analysis.token_analysis.avg_useful_lifetime_hours %}
+                <p>Average Useful Life: {{ "%.1f"|format(analysis.token_analysis.avg_useful_lifetime_hours) }} hours</p>
+                <p>Min Useful Life: {{ "%.1f"|format(analysis.token_analysis.min_useful_lifetime_hours) }} hours</p>
+            {% else %}
+                <p>Average: {{ "%.1f"|format(analysis.token_analysis.avg_lifetime_hours) }} hours</p>
+                <p>Min: {{ "%.1f"|format(analysis.token_analysis.min_lifetime_hours) }} hours</p>
+                <p>Max: {{ "%.1f"|format(analysis.token_analysis.max_lifetime_hours) }} hours</p>
+            {% endif %}
+            <p>Recommended Refresh: Every {{ analysis.token_analysis.recommended_refresh_interval_hours }} hours</p>
+            <p>Samples: {{ analysis.token_analysis.sample_count }}</p>
+        </div>
+        {% endif %}
+
+        {% if analysis.failure_analysis %}
+        <div class="stat-card">
+            <h3>Recent Errors (7 days)</h3>
+            <p>Total Errors: {{ analysis.failure_analysis.total_errors }}</p>
+            {% if analysis.failure_analysis.recent_24h_errors is defined %}
+                <p>Last 24h: {{ analysis.failure_analysis.recent_24h_errors }}</p>
+                <p>Trend: {{ analysis.failure_analysis.error_trend|title }}</p>
+            {% endif %}
+            {% if analysis.failure_analysis.error_counts %}
+            {% for type, count in analysis.failure_analysis.error_counts.items() %}
+            <p>{{ type }}: {{ count }}</p>
+            {% endfor %}
+            {% endif %}
+        </div>
+        {% endif %}
+
+        {% if analysis.correlation_analysis %}
+        <div class="stat-card">
+            <h3>Token Age Correlation</h3>
+            {% if analysis.correlation_analysis.peak_failure_age_hours %}
+                <p>Peak Failure Age: {{ analysis.correlation_analysis.peak_failure_age_hours }}+ hours</p>
+            {% endif %}
+            <p>Total Failures Analyzed: {{ analysis.correlation_analysis.total_failures_analyzed }}</p>
+        </div>
+        {% endif %}
+    </div>
+
+    <p class="timestamp">Analysis based on last {{ analysis.data_period_hours|int }} hours of data. Generated: {{ analysis.generated_at }}</p>
+    {% endif %}
+</body>
+</html>
