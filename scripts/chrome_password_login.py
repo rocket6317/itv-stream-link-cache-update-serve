@@ -1433,6 +1433,27 @@ def cleanup():
         print(f"Removing temp profile: {temp_profile}")
         shutil.rmtree(temp_profile, ignore_errors=True)
 
+def getenv(var_name, default=''):
+    """Get environment variable from os.environ or stack.env file."""
+    # First check os.environ (set by Portainer/Docker)
+    value = os.environ.get(var_name)
+    if value:
+        return value
+
+    # Fallback: read from stack.env file
+    script_dir = os.path.dirname(os.path.abspath(__file__))
+    parent_dir = os.path.dirname(script_dir)
+    stack_env_path = os.path.join(parent_dir, 'stack.env')
+
+    if os.path.exists(stack_env_path):
+        with open(stack_env_path, 'r') as f:
+            for line in f:
+                line = line.strip()
+                if line.startswith(f'{var_name}='):
+                    return line.split('=', 1)[1].strip()
+
+    return default
+
 def main():
     print("=" * 50)
     print("ITVX Password Login (Chrome Automation)")
@@ -1440,12 +1461,24 @@ def main():
 
     os.environ['DISPLAY'] = ':1'
 
-    email = "@kill-the-newsletter.com"
-    password = ""
+    # Read credentials from environment (stack.env or Portainer)
+    email = getenv('ITVX_EMAIL')
+    password = getenv('ITVX_PASSWORD')
+
+    if not email or not password:
+        print("ERROR: ITVX_EMAIL and ITVX_PASSWORD must be set in stack.env or as environment variables")
+        print("Add the following to /home/dietpi/itv/stack.env:")
+        print("  ITVX_EMAIL=your@email.com")
+        print("  ITVX_PASSWORD=yourpassword")
+        log_automation_event('credentials_missing', {
+            'has_email': bool(email),
+            'has_password': bool(password)
+        }, severity='critical')
+        return
 
     # Log start of token refresh attempt
     log_automation_event('token_refresh_start', {
-        'email': email,
+        'email': email[:email.find('@')] + '@...' if '@' in email else 'unknown',
         'max_attempts': 3
     })
 
