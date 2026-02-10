@@ -1440,8 +1440,8 @@ def main():
 
     os.environ['DISPLAY'] = ':1'
 
-    email = "562bcygvohfpdf273h96@kill-the-newsletter.com"
-    password = "nhGzLzFik4Fi4DprqUHQ"
+    email = "@kill-the-newsletter.com"
+    password = ""
 
     # Log start of token refresh attempt
     log_automation_event('token_refresh_start', {
