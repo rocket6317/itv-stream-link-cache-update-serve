@@ -1411,14 +1411,38 @@ def update_stack_env(token, env_file="/home/dietpi/itv/stack.env"):
         f.writelines(lines)
     print("Token updated in stack.env")
 
-def update_docker_container_env(token):
-    """Update the running Docker container's environment variable directly.
+def create_restart_marker():
+    """Create a marker file to indicate this is an automation restart.
 
-    This modifies the container's config in Docker, which works even when
-    using Portainer for deployment. After updating, the container must be
-    restarted to pick up the new value.
+    The container will check for this file on startup and skip token refresh
+    to prevent a restart loop.
+
+    Marker is created in /home/dietpi/itv/logs which maps to /app/logs in container.
     """
-    print("Updating Docker container environment...")
+    marker_path = "/home/dietpi/itv/logs/.automation_restart"
+    try:
+        # Ensure logs directory exists
+        os.makedirs(os.path.dirname(marker_path), exist_ok=True)
+        with open(marker_path, 'w') as f:
+            f.write(str(time.time()))
+        print(f"Created restart marker: {marker_path}")
+        return True
+    except Exception as e:
+        print(f"Warning: Could not create restart marker: {e}")
+        return False
+
+
+def update_docker_container_env(token):
+    """Update the token and restart the container.
+
+    This is a simpler approach that:
+    1. Updates stack.env with the new token
+    2. Creates a restart marker to prevent startup refresh loop
+    3. Restarts the container
+
+    The container will read the new token from stack.env on startup.
+    """
+    print("Preparing container restart with new token...")
 
     # Find the ITV container
     result = subprocess.run(
@@ -1432,130 +1456,17 @@ def update_docker_container_env(token):
         print("Warning: Could not find ITV container")
         return False
 
+    # Create the restart marker BEFORE restarting
+    # This file will be checked by the container on startup
+    create_restart_marker()
+
     try:
-        # Get the container ID
-        result = subprocess.run(
-            ["docker", "ps", "-q", "-f", "name=" + container_name],
-            capture_output=True,
-            text=True
-        )
-        container_id = result.stdout.strip()
-
-        if not container_id:
-            print("Warning: Could not get container ID")
-            return False
-
-        # Stop the container
-        print(f"Stopping container {container_name}...")
-        subprocess.run(["docker", "stop", container_name], check=True)
-
-        # Update the environment variable using docker inspect -> modify -> commit
-        # This approach creates a new image with the updated env var
-        print("Creating new image with updated token...")
-
-        # Get the current image
-        result = subprocess.run(
-            ["docker", "inspect", "--format", "{{.Config.Image}}", container_name],
-            capture_output=True,
-            text=True
-        )
-        current_image = result.stdout.strip()
-
-        # Create a temporary container with the new env var and commit it
-        temp_container = f"itv_temp_{int(time.time())}"
-
-        # Start a temporary container with the new env var
-        subprocess.run([
-            "docker", "run", "-d",
-            "--name", temp_container,
-            "-e", "ITV_ACCESS_TOKEN=" + token,
-            "--entrypoint", "sleep",
-            current_image,
-            "infinity"
-        ], check=True)
-
-        # Commit the temp container as a new image
-        new_image = f"itv_updated:{int(time.time())}"
-        print(f"Committing new image: {new_image}")
-        subprocess.run([
-            "docker", "commit",
-            "-c", "ENV ITV_ACCESS_TOKEN=" + token,
-            temp_container,
-            new_image
-        ], check=True)
-
-        # Remove temp container
-        subprocess.run(["docker", "rm", "-f", temp_container], check=True)
-
-        # Update the original container to use the new image
-        print(f"Updating container {container_name} to use new image...")
-        subprocess.run([
-            "docker", "update",
-            "--restart", "unless-stopped",
-            container_name
-        ], capture_output=True)  # Ignore errors, may not need update
-
-        # We need to recreate the container with the new image
-        # First, get the current container config
-        result = subprocess.run([
-            "docker", "inspect", container_name
-        ], capture_output=True, text=True, check=True)
-        config = json.loads(result.stdout)[0]
-
-        # Get the port bindings
-        port_bindings = config.get("NetworkSettings", {}).get("Ports", {})
-        port_string = ""
-        for container_port, host_bindings in port_bindings.items():
-            if host_bindings and len(host_bindings) > 0:
-                host_port = host_bindings[0].get("HostPort", "")
-                if host_port:
-                    port_string = f"-p {host_port}:{container_port.split('/')[0]}"
-
-        # Get volume mounts
-        mounts = config.get("Mounts", [])
-        volume_strings = []
-        for mount in mounts:
-            source = mount.get("Source", "")
-            destination = mount.get("Destination", "")
-            if source and destination:
-                volume_strings.append(f"-v {source}:{destination}:ro")
-
-        # Get the restart policy
-        restart_policy = config.get("HostConfig", {}).get("RestartPolicy", {}).get("Name", "unless-stopped")
-
-        # Remove the old container
-        print(f"Removing old container {container_name}...")
-        subprocess.run(["docker", "rm", container_name], check=True)
-
-        # Create the new container with the new image
-        print(f"Creating new container with image {new_image}...")
-        create_cmd = [
-            "docker", "run", "-d",
-            "--name", container_name,
-            "--restart", restart_policy
-        ]
-
-        # Add port binding
-        if port_string:
-            create_cmd.extend(port_string.split())
-
-        # Add volumes
-        for vol in volume_strings:
-            create_cmd.extend(vol.split())
-
-        # Add the image
-        create_cmd.append(new_image)
-
-        subprocess.run(create_cmd, check=True)
-
-        print(f"Container {container_name} recreated with updated token")
+        print(f"Restarting container {container_name}...")
+        subprocess.run(["docker", "restart", container_name], check=True)
+        print(f"Container {container_name} restarted successfully")
         return True
-
     except subprocess.CalledProcessError as e:
-        print(f"Error updating Docker container: {e}")
-        return False
-    except Exception as e:
-        print(f"Unexpected error: {e}")
+        print(f"Error restarting container: {e}")
         return False
 
 def cleanup():
