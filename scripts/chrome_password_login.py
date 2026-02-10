@@ -628,12 +628,29 @@ def fill_passcode(ws, passcode, max_submit_attempts=3):
     """
     print(f"Filling in passcode: {passcode}")
 
-    # First, try to dismiss any cookie consent that might be blocking
-    print("Checking for cookie consent modal before filling passcode...")
-    dismiss_result = dismiss_cookie_consent(ws)
-    if dismiss_result.get('dismissed'):
-        print("Cookie consent dismissed, waiting 1s for page to settle...")
-        time.sleep(1)
+    # AGGRESSIVE cookie consent dismissal - try multiple times
+    print("Aggressively dismissing cookie consent modals...")
+    for i in range(3):
+        dismiss_result = dismiss_cookie_consent(ws)
+        if dismiss_result.get('dismissed'):
+            print(f"Cookie consent dismissed (attempt {i+1})")
+        time.sleep(0.5)
+
+    # Also try clicking on the main page body to close any popovers
+    click_body_script = """
+    (function() {
+        // Click on the main content area to close any overlays
+        const main = document.querySelector('main, [role="main"], .main-content, body');
+        if (main) {
+            // Try to click somewhere that won't trigger a link
+            main.click();
+            return {clicked: true};
+        }
+        return {clicked: false};
+    })()
+    """
+    run_js(ws, click_body_script)
+    time.sleep(0.5)
 
     passcode_script = """
     (function() {
@@ -694,30 +711,7 @@ def fill_passcode(ws, passcode, max_submit_attempts=3):
                 .filter(b => b.offsetParent !== null)
                 .map(b => b.textContent.trim());
 
-            // Strategy 1: Look for submit/continue/verify button
-            const submitSelectors = [
-                'button:has-text("Continue")',
-                'button:has-text("CONTINUE")',
-                'button:has-text("Submit")',
-                'button:has-text("SUBMIT")',
-                'button:has-text("Verify")',
-                'button:has-text("VERIFY")',
-                'button[type="submit"]',
-                'button[data-testid="submit"]',
-            ];
-
-            for (const selector of submitSelectors) {
-                try {
-                    const btn = document.querySelector(selector);
-                    if (btn && btn.offsetParent !== null) {
-                        if (btn.disabled) btn.disabled = false;
-                        btn.click();
-                        return {success: true, method: 'selector', selector: selector, text: btn.textContent.trim()};
-                    }
-                } catch (e) {}
-            }
-
-            // Strategy 2: Search by text content
+            // Strategy 1: Look for "Sign in" button (this is what ITV uses for passcode submit)
             const buttons = Array.from(document.querySelectorAll('button'));
             for (let btn of buttons) {
                 if (btn.offsetParent === null) continue;
@@ -725,20 +719,23 @@ def fill_passcode(ws, passcode, max_submit_attempts=3):
 
                 // Skip cookie consent buttons
                 const parentText = btn.parentElement?.textContent.toLowerCase() || '';
-                if (parentText.includes('cookie') || parentText.includes('consent')) {
+                const closestSection = btn.closest('section, div[class*="cookie"], div[class*="consent"]');
+
+                if (closestSection || parentText.includes('cookie') || parentText.includes('consent') ||
+                    text === 'Accept' || text === 'Reject' || text === 'Manage' ||
+                    text.includes('Cookie') || text.includes('Legitimate Interest')) {
                     continue;
                 }
 
-                if (text.includes('Continue') || text.includes('CONTINUE') ||
-                    text.includes('Submit') || text.includes('SUBMIT') ||
-                    text.includes('Verify') || text.includes('VERIFY')) {
+                // Look for Sign in button (ITV uses this for passcode submission)
+                if (text === 'Sign in' || text === 'SIGN IN' || text === 'Continue' || text === 'CONTINUE') {
                     if (btn.disabled) btn.disabled = false;
                     btn.click();
                     return {success: true, method: 'text', text: text};
                 }
             }
 
-            // Strategy 3: Find the form and submit it
+            // Strategy 2: Try to find the form and submit it
             const passcodeInput = document.querySelector('input[type="text"], input[name*="code" i]');
             if (passcodeInput) {
                 const form = passcodeInput.closest('form');
@@ -746,9 +743,17 @@ def fill_passcode(ws, passcode, max_submit_attempts=3):
                     form.submit();
                     return {success: true, method: 'form'};
                 }
+
+                // Try pressing Enter on the input
+                passcodeInput.focus();
+                const enterEvent = new KeyboardEvent('keydown', {
+                    key: 'Enter', code: 'Enter', keyCode: 13, bubbles: true, cancelable: true
+                });
+                passcodeInput.dispatchEvent(enterEvent);
+                return {success: true, method: 'enter_key'};
             }
 
-            return {success: false, error: 'No submit method found', visibleButtons: allButtons.slice(0, 10)};
+            return {success: false, error: 'No submit method found', visibleButtons: allButtons.slice(0, 15)};
         })()
         """
 
@@ -762,32 +767,10 @@ def fill_passcode(ws, passcode, max_submit_attempts=3):
                     print(f"Submit succeeded: {value}")
                     return {'success': True, 'method': value.get('method', 'unknown')}
 
-        # If button not found, try pressing Enter on the input field
+        # Wait before retry
         if attempt < max_submit_attempts - 1:
-            print("Submit button not found, trying Enter key...")
-            enter_script = """
-            (function() {
-                const passcodeInput = document.querySelector('input[type="text"], input[name*="code" i]');
-                if (passcodeInput) {
-                    passcodeInput.focus();
-                    const enterEvent = new KeyboardEvent('keydown', {
-                        key: 'Enter', code: 'Enter', keyCode: 13, bubbles: true, cancelable: true
-                    });
-                    passcodeInput.dispatchEvent(enterEvent);
-                    return {success: true, method: 'enter_key'};
-                }
-                return {success: false, error: 'Input not found for Enter key'};
-            })()
-            """
-            enter_result = run_js(ws, enter_script)
-            print(f"Enter key result: {enter_result}")
-
-            if enter_result and not enter_result.get('error'):
-                # Wait to see if Enter worked
-                time.sleep(2)
-                break
-
-            # Wait before retry
+            print("Submit failed, trying to dismiss cookies again...")
+            dismiss_cookie_consent(ws)
             time.sleep(1)
 
     # All attempts failed - log page state for debugging
