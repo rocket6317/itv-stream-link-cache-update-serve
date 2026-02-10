@@ -1,0 +1,177 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Event Log - ITV Dashboard</title>
+    <style>
+        body {
+            background: #111;
+            color: #eee;
+            font-family: sans-serif;
+            margin: 0;
+            padding: 20px;
+        }
+        h1 {
+            margin-bottom: 20px;
+        }
+        .nav {
+            margin-bottom: 20px;
+        }
+        .nav a {
+            color: #4fc3f7;
+            text-decoration: none;
+            margin-right: 15px;
+        }
+        .nav a:hover {
+            text-decoration: underline;
+        }
+        .filters {
+            background: #222;
+            padding: 15px;
+            border-radius: 4px;
+            margin-bottom: 20px;
+        }
+        .filters select, .filters input {
+            background: #333;
+            border: 1px solid #444;
+            color: #eee;
+            padding: 8px;
+            border-radius: 3px;
+            margin-right: 10px;
+        }
+        .filters button {
+            background: #4fc3f7;
+            border: none;
+            color: #111;
+            padding: 8px 16px;
+            border-radius: 3px;
+            cursor: pointer;
+        }
+        .filters button:hover {
+            background: #29b6f6;
+        }
+        table {
+            width: 100%;
+            border-collapse: collapse;
+        }
+        th, td {
+            padding: 10px;
+            text-align: left;
+            border-bottom: 1px solid #444;
+            vertical-align: top;
+        }
+        th {
+            background: #222;
+            font-weight: bold;
+        }
+        .severity-info { color: #2196f3; }
+        .severity-warning { color: #ff9800; }
+        .severity-error { color: #f44336; }
+        .severity-critical { color: #d32f2f; font-weight: bold; }
+        .timestamp {
+            color: #888;
+            font-size: 12px;
+        }
+        .details {
+            font-family: monospace;
+            font-size: 11px;
+            color: #aaa;
+            max-width: 400px;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+        .no-events {
+            text-align: center;
+            padding: 40px;
+            color: #888;
+        }
+    </style>
+    <script>
+        function applyFilters() {
+            const eventType = document.getElementById('eventType').value;
+            const hours = document.getElementById('hours').value;
+            const url = new URL(window.location);
+            if (eventType) url.searchParams.set('event_type', eventType);
+            else url.searchParams.delete('event_type');
+            url.searchParams.set('hours', hours);
+            window.location = url.toString();
+        }
+    </script>
+</head>
+<body>
+    <h1>Event Log</h1>
+
+    <div class="nav">
+        <a href="/dashboard">Dashboard</a>
+        <a href="/patterns">Patterns</a>
+        <a href="/events">Events</a>
+        <a href="/stats">Statistics</a>
+        <a href="/logs">Change Logs</a>
+        <a href="/token-logs">Token Logs</a>
+    </div>
+
+    {% if not available %}
+        <div class="no-events">
+            Event tracker not available: {{ error }}
+        </div>
+    {% else %}
+    <div class="filters">
+        <label>Event Type:
+            <select id="eventType">
+                <option value="">All Types</option>
+                <option value="token_refresh_success" {% if filter_type == 'token_refresh_success' %}selected{% endif %}>Token Refresh Success</option>
+                <option value="token_refresh_failed" {% if filter_type == 'token_refresh_failed' %}selected{% endif %}>Token Refresh Failed</option>
+                <option value="url_fetch_success" {% if filter_type == 'url_fetch_success' %}selected{% endif %}>URL Fetch Success</option>
+                <option value="url_fetch_error_401" {% if filter_type == 'url_fetch_error_401' %}selected{% endif %}>URL Fetch Error 401</option>
+                <option value="url_fetch_error_503" {% if filter_type == 'url_fetch_error_503' %}selected{% endif %}>URL Fetch Error 503</option>
+                <option value="automation_login_success" {% if filter_type == 'automation_login_success' %}selected{% endif %}>Automation Login Success</option>
+                <option value="automation_login_failed" {% if filter_type == 'automation_login_failed' %}selected{% endif %}>Automation Login Failed</option>
+            </select>
+        </label>
+        <label>Time Window:
+            <select id="hours">
+                <option value="1" {% if hours == 1 %}selected{% endif %}>Last 1 hour</option>
+                <option value="6" {% if hours == 6 %}selected{% endif %}>Last 6 hours</option>
+                <option value="24" {% if hours == 24 %}selected{% endif %}>Last 24 hours</option>
+                <option value="168" {% if hours == 168 %}selected{% endif %}>Last 7 days</option>
+            </select>
+        </label>
+        <button onclick="applyFilters()">Apply</button>
+        <a href="/events/json{% if filter_type %}?event_type={{ filter_type }}&hours={{ hours }}{% elif hours != 24 %}?hours={{ hours }}{% endif %}" style="color: #4fc3f7; margin-left: 15px;">View as JSON</a>
+    </div>
+
+    {% if events %}
+    <table>
+        <thead>
+            <tr>
+                <th width="180">Timestamp</th>
+                <th width="120">Severity</th>
+                <th width="200">Event Type</th>
+                <th>Description</th>
+                <th>Details</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for event in events %}
+            <tr>
+                <td class="timestamp">{{ event.timestamp }}</td>
+                <td class="severity-{{ event.severity }}">{{ event.severity|upper }}</td>
+                <td><code>{{ event.event_type }}</code></td>
+                <td>{{ event.description }}</td>
+                <td class="details">{{ event.details|tojson }}</td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+    <p style="color: #888; margin-top: 10px;">Showing {{ events|length }} events from the last {{ hours }} hours.</p>
+    {% else %}
+    <div class="no-events">
+        No events found for the selected filters.
+    </div>
+    {% endif %}
+    {% endif %}
+
+    <script>
+        setTimeout(() => location.reload(), 60000);
+    </script>
+</body>
+</html>
