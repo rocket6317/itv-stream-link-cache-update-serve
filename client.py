@@ -77,6 +77,8 @@ def get_cookies_and_user_id():
         if legacy_cookie:
             cookies['SyrenisCookieFormConsent_Itv.Session'] = legacy_cookie
 
+    return cookies, user_id, access_token
+
 def get_token_age_hours(access_token):
     """Calculate token age in hours from JWT expiration claim.
 
@@ -124,9 +126,6 @@ def extract_cdn(url):
         return 'unknown'
     except:
         return 'unknown'
-
-
-    return cookies, user_id, access_token
 
 def build_request_data(user_id=None, access_token=None):
     """Build the request data payload with user ID and token (matches browser structure)."""
