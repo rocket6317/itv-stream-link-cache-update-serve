@@ -8,3 +8,4 @@ services:
       - "1995:8000"
     volumes:
       - /home/dietpi/itv/stack.env:/app/stack.env:ro
+      - /home/dietpi/itv/logs:/app/logs
