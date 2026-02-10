@@ -1,6 +1,8 @@
 import asyncio
 import logging
 import os
+from pathlib import Path
+from logging.handlers import RotatingFileHandler
 from fastapi import FastAPI, Request, HTTPException, Depends
 from fastapi.responses import RedirectResponse, PlainTextResponse
 from fastapi.templating import Jinja2Templates
@@ -22,10 +24,40 @@ except ImportError:
     def get_url_history(channel=None): return []
     def analyze_url_changes(): return None
 
+# Try to import event_tracker and pattern_analyzer
+try:
+    from event_tracker import get_events, get_event_stats, log_event
+    from pattern_analyzer import generate_recommendations, get_summary_dashboard
+    EVENT_TRACKER_AVAILABLE = True
+except ImportError:
+    EVENT_TRACKER_AVAILABLE = False
+    def get_events(*args, **kwargs): return []
+    def get_event_stats(*args, **kwargs): return {}
+    def generate_recommendations(): return {}
+    def get_summary_dashboard(): return {}
+    def log_event(*args, **kwargs): pass
+
 app = FastAPI()
 templates = Jinja2Templates(directory="templates")
 security = HTTPBasic()
 logger = logging.getLogger("uvicorn")
+
+# Setup file logging for uvicorn
+LOG_DIR = Path("/app/logs")
+LOG_DIR.mkdir(exist_ok=True)
+
+uvicorn_logger = logging.getLogger("uvicorn")
+uvicorn_logger.setLevel(logging.INFO)
+
+file_handler = RotatingFileHandler(
+    LOG_DIR / "uvicorn.log",
+    maxBytes=10*1024*1024,
+    backupCount=5
+)
+file_handler.setFormatter(logging.Formatter(
+    '%(asctime)s - %(levelname)s - %(message)s'
+))
+uvicorn_logger.addHandler(file_handler)
 
 # Custom Jinja2 filter for event styling
 def event_class_filter(event_type: str) -> str:
@@ -158,6 +190,10 @@ async def token_status(credentials: HTTPBasicCredentials = Depends(security)):
 
 @app.on_event("startup")
 async def startup_event():
+    # Log service startup
+    if EVENT_TRACKER_AVAILABLE:
+        log_event('startup', {'channels': CHANNELS})
+
     # Pre-fetch channels
     for channel in CHANNELS:
         try:
@@ -166,7 +202,23 @@ async def startup_event():
             logger.info(f"[STARTUP] Cached {channel}")
         except Exception as e:
             logger.warning(f"[STARTUP ERROR] {channel}: {e}")
+
     asyncio.create_task(auto_refresh_loop())
+    asyncio.create_task(log_scanner_loop())
+
+
+async def log_scanner_loop():
+    """Periodically scan uvicorn logs for error patterns."""
+    while True:
+        try:
+            if EVENT_TRACKER_AVAILABLE:
+                from log_parser import scan_and_log_errors
+                count = scan_and_log_errors()
+                if count and count > 0:
+                    logger.info(f"[LOG SCANNER] Found {count} HTTP errors in last hour")
+        except Exception as e:
+            logger.error(f"[LOG SCANNER] Error: {e}")
+        await asyncio.sleep(3600)  # Run every hour
 
 async def auto_refresh_loop():
     while True:
@@ -289,3 +341,85 @@ async def url_analysis(credentials: HTTPBasicCredentials = Depends(security)):
     if not CHANGE_LOG_AVAILABLE:
         return {"error": "Change log module not available"}
     return analyze_url_changes()
+
+
+# New pattern analysis endpoints
+@app.get("/patterns")
+async def view_patterns(
+    request: Request,
+    credentials: HTTPBasicCredentials = Depends(security)
+):
+    """View failure patterns and recommendations."""
+    check_auth(credentials)
+    if not EVENT_TRACKER_AVAILABLE:
+        return templates.TemplateResponse("patterns.html", {
+            "request": request,
+            "error": "Event tracker module not available"
+        })
+    analysis = generate_recommendations()
+    return templates.TemplateResponse("patterns.html", {
+        "request": request,
+        "analysis": analysis,
+        "available": True
+    })
+
+
+@app.get("/patterns/json")
+async def view_patterns_json(credentials: HTTPBasicCredentials = Depends(security)):
+    """Get pattern analysis as JSON."""
+    check_auth(credentials)
+    if not EVENT_TRACKER_AVAILABLE:
+        return {"error": "Event tracker module not available"}
+    return generate_recommendations()
+
+
+@app.get("/events")
+async def view_events(
+    request: Request,
+    credentials: HTTPBasicCredentials = Depends(security),
+    event_type: str = None,
+    hours: int = 24
+):
+    """View raw events with filtering."""
+    check_auth(credentials)
+    if not EVENT_TRACKER_AVAILABLE:
+        return templates.TemplateResponse("events.html", {
+            "request": request,
+            "events": [],
+            "filter_type": event_type,
+            "hours": hours,
+            "error": "Event tracker module not available"
+        })
+    events = get_events(event_type=event_type, hours_ago=hours)
+    return templates.TemplateResponse("events.html", {
+        "request": request,
+        "events": events,
+        "filter_type": event_type,
+        "hours": hours,
+        "available": True
+    })
+
+
+@app.get("/events/json")
+async def view_events_json(
+    credentials: HTTPBasicCredentials = Depends(security),
+    event_type: str = None,
+    hours: int = 24
+):
+    """Get events as JSON."""
+    check_auth(credentials)
+    if not EVENT_TRACKER_AVAILABLE:
+        return {"error": "Event tracker module not available"}
+    return get_events(event_type=event_type, hours_ago=hours)
+
+
+@app.get("/events/stats")
+async def view_events_stats(
+    credentials: HTTPBasicCredentials = Depends(security),
+    hours: int = 24
+):
+    """Get event statistics."""
+    check_auth(credentials)
+    if not EVENT_TRACKER_AVAILABLE:
+        return {"error": "Event tracker module not available"}
+    return get_event_stats(hours_ago=hours)
