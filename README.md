@@ -1,5 +1,7 @@
 # ITV Stream Link Cache
 
+[![ko-fi](https://ko-fi.com/img/githubbutton_sm.svg)](https://ko-fi.com/M4M31NTEGN)
+
 A FastAPI service that caches ITV live stream URLs with automated token refresh. Works on ARM devices (DietPi/Raspberry Pi).
 
 ## Features
