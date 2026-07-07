@@ -6,7 +6,8 @@ A FastAPI service that caches ITV live stream URLs with automated token refresh.
 
 ## Features
 
-- Cached stream URLs for 5 ITV channels (ITV, ITV2, ITV3, ITV4, ITVBe)
+- Cached stream URLs for configured ITV channels
+- On-demand cache population for additional ITV channel IDs requested by players
 - Automated token refresh via cron + VNC
 - Web dashboard for monitoring
 - Auto-restart on container failure
@@ -55,6 +56,14 @@ http://your-host:1995/itvx?channel=ITV4
 http://your-host:1995/itvx?channel=ITVBe
 ```
 
+Additional ITV channel IDs can be requested with the same endpoint. If the
+channel is not already cached, the service will fetch it from ITVX, cache it,
+and redirect the player when the upstream request succeeds:
+
+```
+http://your-host:1995/itvx?channel=FAST3
+```
+
 ## Environment Variables
 
 | Variable | Required | Description |
@@ -95,11 +104,9 @@ crontab -e
 
 ## Portainer Users
 
-If using Portainer, edit `docker-compose.yml` to use absolute path for `stack.env`:
-```yaml
-volumes:
-  - /absolute/path/to/stack.env:/app/stack.env:ro
-```
+If using Portainer, deploy the stack from this Git repository and provide
+`stack.env` alongside `docker-compose.yml` in the stack directory. Keep
+`stack.env` private and do not commit it to GitHub.
 
 ## Requirements
 
