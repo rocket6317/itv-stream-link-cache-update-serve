@@ -34,3 +34,7 @@ def peek_cached_entry(channel: str):
     if entry["expires_at"] < datetime.utcnow():
         return None
     return entry
+
+def get_cached_channels():
+    now = datetime.utcnow()
+    return [channel for channel, entry in CACHE.items() if entry["expires_at"] >= now]

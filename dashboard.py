@@ -2,10 +2,13 @@ import os
 import base64
 import json
 from datetime import timedelta, datetime, timezone
-from cache import peek_cached_entry
+from cache import get_cached_channels, peek_cached_entry
 
 REFRESH_INTERVAL = int(os.getenv("REFRESH_INTERVAL", "21300"))
 CHANNELS = ["ITV", "ITV2", "ITV3", "ITV4", "ITVBe"]
+
+def get_dashboard_channels():
+    return list(dict.fromkeys(CHANNELS + sorted(get_cached_channels())))
 
 def extract_jwt_expiration(url):
     """Extract JWT expiration time from URL."""
@@ -33,7 +36,7 @@ def extract_jwt_expiration(url):
 
 def get_dashboard_data():
     data = {"streams": []}
-    for channel in CHANNELS:
+    for channel in get_dashboard_channels():
         entry = peek_cached_entry(channel)
         if entry:
             next_refresh = entry["cached_at"] + timedelta(seconds=REFRESH_INTERVAL)

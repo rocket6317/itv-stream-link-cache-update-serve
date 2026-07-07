@@ -10,7 +10,7 @@ from fastapi.security import HTTPBasic, HTTPBasicCredentials
 from starlette.status import HTTP_401_UNAUTHORIZED
 from dotenv import load_dotenv
 from dashboard import get_dashboard_data
-from cache import get_cached_url, set_cached_url, peek_cached_entry
+from cache import get_cached_url, set_cached_url, peek_cached_entry, get_cached_channels
 from client import fetch_stream_url
 
 # Try to import change_log, handle if not available
@@ -86,6 +86,10 @@ CHANNEL_FETCH_LOCKS = {}
 
 def get_refresh_channels():
     return list(dict.fromkeys(CHANNELS + sorted(DYNAMIC_CHANNELS)))
+
+
+def get_display_channels():
+    return list(dict.fromkeys(CHANNELS + sorted(DYNAMIC_CHANNELS | set(get_cached_channels()))))
 
 
 def get_channel_lock(channel: str):
@@ -345,7 +349,8 @@ async def view_stats(
     try:
         token_stats = get_token_history()
         channel_stats = {}
-        for ch in CHANNELS:
+        channels = get_display_channels()
+        for ch in channels:
             try:
                 history = get_url_history(ch)
                 channel_stats[ch] = history[-10:] if history else []
@@ -354,23 +359,25 @@ async def view_stats(
         return templates.TemplateResponse(request, "stats.html", {
             "token_stats": token_stats,
             "channel_stats": channel_stats,
-            "channels": CHANNELS
+            "channels": channels
         })
     except Exception as e:
         logger.error(f"Error in /stats: {e}")
+        channels = get_display_channels()
         return templates.TemplateResponse(request, "stats.html", {
             "token_stats": None,
-            "channel_stats": {ch: [] for ch in CHANNELS},
-            "channels": CHANNELS
+            "channel_stats": {ch: [] for ch in channels},
+            "channels": channels
         })
 
 @app.get("/stats/json")
 async def view_stats_json(credentials: HTTPBasicCredentials = Depends(security)):
     """Get stats as JSON."""
     check_auth(credentials)
+    channels = get_display_channels()
     return {
         'token': get_token_history(),
-        'channels': {ch: get_url_history(ch)[-10:] for ch in CHANNELS}
+        'channels': {ch: get_url_history(ch)[-10:] for ch in channels}
     }
 
 @app.get("/debug")
