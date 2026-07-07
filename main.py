@@ -80,6 +80,20 @@ USERNAME = os.getenv("DASHBOARD_USER")
 PASSWORD = os.getenv("DASHBOARD_PASS")
 REFRESH_INTERVAL = int(os.getenv("REFRESH_INTERVAL", "21300"))
 CHANNELS = ["ITV", "ITV2", "ITV3", "ITV4", "ITVBe"]
+DYNAMIC_CHANNELS = set()
+CHANNEL_FETCH_LOCKS = {}
+
+
+def get_refresh_channels():
+    return list(dict.fromkeys(CHANNELS + sorted(DYNAMIC_CHANNELS)))
+
+
+def get_channel_lock(channel: str):
+    lock = CHANNEL_FETCH_LOCKS.get(channel)
+    if lock is None:
+        lock = asyncio.Lock()
+        CHANNEL_FETCH_LOCKS[channel] = lock
+    return lock
 
 def check_auth(credentials: HTTPBasicCredentials):
     if credentials.username != USERNAME or credentials.password != PASSWORD:
@@ -89,11 +103,30 @@ from fastapi import Request
 
 @app.get("/itvx")
 async def redirect_itv(channel: str, request: Request):
+    channel = channel.strip()
     ip = request.client.host
     entry = get_cached_url(channel, ip)
     if entry:
         return RedirectResponse(entry["url"], status_code=302)
-    raise HTTPException(status_code=503, detail="Stream not ready or expired")
+
+    async with get_channel_lock(channel):
+        entry = get_cached_url(channel, ip)
+        if entry:
+            return RedirectResponse(entry["url"], status_code=302)
+
+        try:
+            logger.info(f"[ON DEMAND] Fetching uncached channel {channel}")
+            url = await fetch_stream_url(channel)
+            set_cached_url(channel, url)
+            if channel not in CHANNELS:
+                DYNAMIC_CHANNELS.add(channel)
+                logger.info(f"[ON DEMAND] Added dynamic channel {channel}")
+            return RedirectResponse(url, status_code=302)
+        except HTTPException:
+            raise
+        except Exception as e:
+            logger.warning(f"[ON DEMAND ERROR] {channel}: {e}")
+            raise HTTPException(status_code=503, detail="Stream not ready or expired")
 
 @app.get("/dashboard")
 async def dashboard(
@@ -273,7 +306,7 @@ async def log_scanner_loop():
 
 async def auto_refresh_loop():
     while True:
-        for channel in CHANNELS:
+        for channel in get_refresh_channels():
             try:
                 url = await fetch_stream_url(channel)
                 set_cached_url(channel, url)
