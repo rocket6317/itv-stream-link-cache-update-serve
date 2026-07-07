@@ -135,7 +135,7 @@ async def dashboard(
 ):
     check_auth(credentials)
     data = get_dashboard_data()
-    return templates.TemplateResponse("dashboard.html", {"request": request, "data": data})
+    return templates.TemplateResponse(request, "dashboard.html", {"data": data})
 
 @app.get("/dashboard/json")
 async def dashboard_json(credentials: HTTPBasicCredentials = Depends(security)):
@@ -324,10 +324,10 @@ async def view_logs(
     check_auth(credentials)
     try:
         logs = get_logs(100)
-        return templates.TemplateResponse("logs.html", {"request": request, "logs": logs})
+        return templates.TemplateResponse(request, "logs.html", {"logs": logs})
     except Exception as e:
         logger.error(f"Error in /logs: {e}")
-        return templates.TemplateResponse("logs.html", {"request": request, "logs": []})
+        return templates.TemplateResponse(request, "logs.html", {"logs": []})
 
 @app.get("/logs/json")
 async def view_logs_json(credentials: HTTPBasicCredentials = Depends(security)):
@@ -351,16 +351,14 @@ async def view_stats(
                 channel_stats[ch] = history[-10:] if history else []
             except Exception:
                 channel_stats[ch] = []
-        return templates.TemplateResponse("stats.html", {
-            "request": request,
+        return templates.TemplateResponse(request, "stats.html", {
             "token_stats": token_stats,
             "channel_stats": channel_stats,
             "channels": CHANNELS
         })
     except Exception as e:
         logger.error(f"Error in /stats: {e}")
-        return templates.TemplateResponse("stats.html", {
-            "request": request,
+        return templates.TemplateResponse(request, "stats.html", {
             "token_stats": None,
             "channel_stats": {ch: [] for ch in CHANNELS},
             "channels": CHANNELS
@@ -410,7 +408,7 @@ async def view_token_logs(
     """View token refresh logs."""
     check_auth(credentials)
     logs = get_token_refresh_logs(200)
-    return templates.TemplateResponse("token_logs.html", {"request": request, "logs": logs})
+    return templates.TemplateResponse(request, "token_logs.html", {"logs": logs})
 
 @app.get("/token-logs/json")
 async def view_token_logs_json(credentials: HTTPBasicCredentials = Depends(security)):
@@ -436,13 +434,11 @@ async def view_patterns(
     """View failure patterns and recommendations."""
     check_auth(credentials)
     if not EVENT_TRACKER_AVAILABLE:
-        return templates.TemplateResponse("patterns.html", {
-            "request": request,
+        return templates.TemplateResponse(request, "patterns.html", {
             "error": "Event tracker module not available"
         })
     analysis = generate_recommendations()
-    return templates.TemplateResponse("patterns.html", {
-        "request": request,
+    return templates.TemplateResponse(request, "patterns.html", {
         "analysis": analysis,
         "available": True
     })
@@ -467,16 +463,14 @@ async def view_events(
     """View raw events with filtering."""
     check_auth(credentials)
     if not EVENT_TRACKER_AVAILABLE:
-        return templates.TemplateResponse("events.html", {
-            "request": request,
+        return templates.TemplateResponse(request, "events.html", {
             "events": [],
             "filter_type": event_type,
             "hours": hours,
             "error": "Event tracker module not available"
         })
     events = get_events(event_type=event_type, hours_ago=hours)
-    return templates.TemplateResponse("events.html", {
-        "request": request,
+    return templates.TemplateResponse(request, "events.html", {
         "events": events,
         "filter_type": event_type,
         "hours": hours,
