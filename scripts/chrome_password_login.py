@@ -762,16 +762,37 @@ def fill_passcode(ws, passcode, max_submit_attempts=3):
                 }
             }
 
-            // Strategy 2: Try to find the form and submit it
+            // Strategy 2: Try any enabled submit button near the passcode input
             const passcodeInput = document.querySelector('input[type="text"], input[name*="code" i]');
             if (passcodeInput) {
                 const form = passcodeInput.closest('form');
-                if (form) {
-                    form.submit();
-                    return {success: true, method: 'form'};
+                const candidateButtons = Array.from(document.querySelectorAll('button, input[type="submit"]'))
+                    .filter(el => el.offsetParent !== null && !el.disabled);
+                const submitButton = candidateButtons.find(el => {
+                    const text = (el.textContent || el.value || '').trim().toLowerCase();
+                    if (text.includes('accept') || text.includes('reject') || text.includes('cookie') || text.includes('manage')) {
+                        return false;
+                    }
+                    return el.type === 'submit' || text.includes('sign in') || text.includes('continue') || text.includes('submit');
+                });
+                if (submitButton) {
+                    submitButton.scrollIntoView({block: 'center'});
+                    submitButton.focus();
+                    submitButton.dispatchEvent(new MouseEvent('mousedown', {bubbles: true, cancelable: true, view: window}));
+                    submitButton.dispatchEvent(new MouseEvent('mouseup', {bubbles: true, cancelable: true, view: window}));
+                    submitButton.click();
+                    return {success: true, method: 'button_click', text: (submitButton.textContent || submitButton.value || '').trim()};
                 }
 
-                // Try pressing Enter on the input
+                // Strategy 3: Ask the browser to submit the form as if the user clicked submit.
+                if (form) {
+                    if (form.requestSubmit) {
+                        form.requestSubmit();
+                        return {success: true, method: 'requestSubmit'};
+                    }
+                }
+
+                // Strategy 4: Try pressing Enter on the input
                 passcodeInput.focus();
                 const enterEvent = new KeyboardEvent('keydown', {
                     key: 'Enter', code: 'Enter', keyCode: 13, bubbles: true, cancelable: true
@@ -1528,7 +1549,7 @@ def main():
             'has_email': bool(email),
             'has_password': bool(password)
         }, severity='critical')
-        return
+        sys.exit(1)
 
     # Log start of token refresh attempt
     log_automation_event('token_refresh_start', {
