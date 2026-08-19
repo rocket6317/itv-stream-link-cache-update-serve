@@ -17,6 +17,7 @@ import shutil
 import random
 import xml.etree.ElementTree as ET
 import re
+import websocket
 from datetime import datetime, timezone
 
 # Global to track temp profile for cleanup
@@ -39,6 +40,25 @@ def get_logs_dir():
 
 def get_passcode_cache_path():
     return os.path.join(get_logs_dir(), "last_passcode.json")
+
+
+def has_reusable_passcode():
+    manual_passcode = getenv("ITVX_PASSCODE")
+    if manual_passcode and re.fullmatch(r"\d{6}", manual_passcode):
+        return True
+
+    try:
+        cache_path = get_passcode_cache_path()
+        if os.path.exists(cache_path):
+            with open(cache_path, "r") as f:
+                cached = json.load(f)
+            cached_at = datetime.fromisoformat(cached["cached_at"])
+            age_minutes = (datetime.now(timezone.utc) - cached_at).total_seconds() / 60
+            return age_minutes <= 15 and re.fullmatch(r"\d{6}", cached.get("passcode", ""))
+    except Exception:
+        pass
+
+    return False
 
 
 # Event tracking integration
@@ -775,13 +795,10 @@ def fill_passcode(ws, passcode, max_submit_attempts=3):
                 if (btn.offsetParent === null) continue;
                 const text = btn.textContent.trim();
 
-                // Skip cookie consent buttons
-                const parentText = btn.parentElement?.textContent.toLowerCase() || '';
-                const closestSection = btn.closest('section, div[class*="cookie"], div[class*="consent"]');
-
-                if (closestSection || parentText.includes('cookie') || parentText.includes('consent') ||
-                    text === 'Accept' || text === 'Reject' || text === 'Manage' ||
-                    text.includes('Cookie') || text.includes('Legitimate Interest')) {
+                const lowerText = text.toLowerCase();
+                if (lowerText === 'close' || lowerText.includes('apple') || lowerText.includes('google') ||
+                    lowerText === 'accept' || lowerText === 'reject' || lowerText === 'manage' ||
+                    lowerText.includes('cookie') || lowerText.includes('legitimate interest')) {
                     continue;
                 }
 
@@ -1379,9 +1396,12 @@ def start_chrome_and_login(email, password):
         # PASSCODE FLOW - retrieve passcode from RSS and fill it
         print("PASSCODE DETECTED - Using passcode login flow...")
         log_automation_event('automation_passcode_flow', {'headings': headings}, severity='warning')
-        print("Waiting 45s for email to arrive at kill-the-newsletter...")
-        print("(Passcode is valid for 15 minutes, so we can afford to wait)")
-        time.sleep(45)  # Fixed 45s wait + 20s in get_passcode_from_rss = ~65s total
+        if has_reusable_passcode():
+            print("Reusable passcode available; skipping email arrival wait")
+        else:
+            print("Waiting 45s for email to arrive at kill-the-newsletter...")
+            print("(Passcode is valid for 15 minutes, so we can afford to wait)")
+            time.sleep(45)  # Fixed 45s wait + 20s in get_passcode_from_rss = ~65s total
 
         # RSS feed URL for kill-the-newsletter
         rss_feed_url = "https://kill-the-newsletter.com/feeds/562bcygvohfpdf273h96.xml"
