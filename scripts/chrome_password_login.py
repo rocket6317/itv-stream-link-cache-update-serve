@@ -629,6 +629,19 @@ def run_js(ws, script, timeout=10, retries=2):
 
     return {'error': 'Failed to get response after retries'}
 
+
+def get_js_value(result):
+    """Extract a returnByValue result from Chrome DevTools Runtime.evaluate."""
+    if not isinstance(result, dict):
+        return None
+    inner = result.get('result', {})
+    if not isinstance(inner, dict):
+        return None
+    runtime_result = inner.get('result', {})
+    if not isinstance(runtime_result, dict):
+        return None
+    return runtime_result.get('value')
+
 def fill_passcode(ws, passcode, max_submit_attempts=3):
     """Fill in the passcode and submit with multiple fallback strategies
 
@@ -773,13 +786,11 @@ def fill_passcode(ws, passcode, max_submit_attempts=3):
 
         submit_result = run_js(ws, submit_script, timeout=10)
 
-        if submit_result and 'result' in submit_result:
-            inner_result = submit_result.get('result', {})
-            if isinstance(inner_result, dict) and 'value' in inner_result:
-                value = inner_result.get('value', {})
-                if isinstance(value, dict) and value.get('success'):
-                    print(f"Submit succeeded: {value}")
-                    return {'success': True, 'method': value.get('method', 'unknown')}
+        value = get_js_value(submit_result)
+        if isinstance(value, dict) and value.get('success'):
+            print(f"Submit succeeded: {value}")
+            return {'success': True, 'method': value.get('method', 'unknown')}
+        print(f"Submit result: {value or submit_result}")
 
         # Wait before retry
         if attempt < max_submit_attempts - 1:
