@@ -37,6 +37,10 @@ def get_logs_dir():
     return os.environ.get("ITV_LOG_DIR", os.path.join(get_app_dir(), "logs"))
 
 
+def get_passcode_cache_path():
+    return os.path.join(get_logs_dir(), "last_passcode.json")
+
+
 # Event tracking integration
 EVENT_TRACKER_AVAILABLE = False
 try:
@@ -315,6 +319,24 @@ def get_passcode_from_rss(feed_url, max_retries=2, max_age_minutes=5, initial_wa
         max_age_minutes: Max age of email to accept (default: 5 minutes)
         initial_wait: Seconds to wait before first fetch (default: 20s)
     """
+    manual_passcode = getenv("ITVX_PASSCODE")
+    if manual_passcode and re.fullmatch(r"\d{6}", manual_passcode):
+        print("Using passcode from ITVX_PASSCODE; skipping feed fetch")
+        return manual_passcode
+
+    cache_path = get_passcode_cache_path()
+    try:
+        if os.path.exists(cache_path):
+            with open(cache_path, "r") as f:
+                cached = json.load(f)
+            cached_at = datetime.fromisoformat(cached["cached_at"])
+            age_minutes = (datetime.now(timezone.utc) - cached_at).total_seconds() / 60
+            if age_minutes <= 15 and re.fullmatch(r"\d{6}", cached.get("passcode", "")):
+                print(f"Reusing cached passcode from {age_minutes:.1f} minutes ago; skipping feed fetch")
+                return cached["passcode"]
+    except Exception as e:
+        print(f"Could not read passcode cache: {e}")
+
     # Define namespaces as constants (avoid f-string issues with {http://...})
     ATOM_NS = '{http://www.w3.org/2005/Atom}'
     RSS_CONTENT_NS = '{http://purl.org/rss/1.0/modules/content/}'
@@ -496,6 +518,15 @@ def get_passcode_from_rss(feed_url, max_retries=2, max_age_minutes=5, initial_wa
                 if passcode_match:
                     passcode = passcode_match.group(1)
                     print(f"Found passcode: {passcode}")
+                    try:
+                        os.makedirs(os.path.dirname(cache_path), exist_ok=True)
+                        with open(cache_path, "w") as f:
+                            json.dump({
+                                "passcode": passcode,
+                                "cached_at": datetime.now(timezone.utc).isoformat()
+                            }, f)
+                    except Exception as e:
+                        print(f"Could not write passcode cache: {e}")
                     return passcode
                 else:
                     print(f"Attempt {attempt}/{max_retries}: No 6-digit passcode found in email")
