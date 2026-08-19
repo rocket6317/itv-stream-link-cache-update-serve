@@ -23,6 +23,20 @@ from datetime import datetime, timezone
 temp_profile = None
 message_id = 100  # Start from 100 to avoid conflicts
 
+
+def get_app_dir():
+    script_dir = os.path.dirname(os.path.abspath(__file__))
+    return os.path.dirname(script_dir)
+
+
+def get_stack_env_path():
+    return os.environ.get("ITV_STACK_ENV", os.path.join(get_app_dir(), "stack.env"))
+
+
+def get_logs_dir():
+    return os.environ.get("ITV_LOG_DIR", os.path.join(get_app_dir(), "logs"))
+
+
 # Event tracking integration
 EVENT_TRACKER_AVAILABLE = False
 try:
@@ -1375,7 +1389,9 @@ def extract_token_from_chrome():
 
     return None
 
-def update_stack_env(token, env_file="/home/dietpi/itv/stack.env"):
+def update_stack_env(token, env_file=None):
+    if env_file is None:
+        env_file = get_stack_env_path()
     print("Updating " + env_file + "...")
     if os.path.exists(env_file):
         with open(env_file, "r") as f:
@@ -1400,9 +1416,9 @@ def create_restart_marker():
     The container will check for this file on startup and skip token refresh
     to prevent a restart loop.
 
-    Marker is created in /home/dietpi/itv/logs which maps to /app/logs in container.
+    Marker is created in the app logs directory, which maps to /app/logs in container.
     """
-    marker_path = "/home/dietpi/itv/logs/.automation_restart"
+    marker_path = os.path.join(get_logs_dir(), ".automation_restart")
     try:
         # Ensure logs directory exists
         os.makedirs(os.path.dirname(marker_path), exist_ok=True)
@@ -1494,7 +1510,7 @@ def main():
 
     if not email or not password:
         print("ERROR: ITVX_EMAIL and ITVX_PASSWORD must be set in stack.env or as environment variables")
-        print("Add the following to /home/dietpi/itv/stack.env:")
+        print(f"Add the following to {get_stack_env_path()}:")
         print("  ITVX_EMAIL=your@email.com")
         print("  ITVX_PASSWORD=yourpassword")
         log_automation_event('credentials_missing', {
