@@ -1502,7 +1502,7 @@ def main():
     print("ITVX Password Login (Chrome Automation)")
     print("=" * 50)
 
-    os.environ['DISPLAY'] = ':1'
+    os.environ.setdefault('DISPLAY', ':1')
 
     # Read credentials from environment (stack.env or Portainer)
     email = getenv('ITVX_EMAIL')
