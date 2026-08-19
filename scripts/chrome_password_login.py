@@ -797,11 +797,13 @@ def fill_passcode(ws, passcode, max_submit_attempts=3):
             const passcodeInput = document.querySelector('input[type="text"], input[name*="code" i]');
             if (passcodeInput) {
                 const form = passcodeInput.closest('form');
-                const candidateButtons = Array.from(document.querySelectorAll('button, input[type="submit"]'))
+                const buttonScope = form || document;
+                const candidateButtons = Array.from(buttonScope.querySelectorAll('button, input[type="submit"]'))
                     .filter(el => el.offsetParent !== null && !el.disabled);
                 const submitButton = candidateButtons.find(el => {
                     const text = (el.textContent || el.value || '').trim().toLowerCase();
-                    if (text.includes('accept') || text.includes('reject') || text.includes('cookie') || text.includes('manage')) {
+                    if (text === 'close' || text.includes('accept') || text.includes('reject') ||
+                        text.includes('cookie') || text.includes('manage') || text.includes('preference')) {
                         return false;
                     }
                     return el.type === 'submit' || text.includes('sign in') || text.includes('continue') || text.includes('submit');
